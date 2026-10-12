@@ -106,10 +106,17 @@ def _cmd_unlock():
         )
 
         valid_moves: list[tuple[int, int, int]] = []
-        for plate_i in unprobed:
-            plate_pos = _lock_get(lock, plate_i)
-            valid_moves.extend(
-                _valid_moves(lock, interlocks, n_plates, plate_i, plate_pos)
+        # Ignore centered plates in case if they are not interlocked with other plates at all.
+        all_solved = _populate_valid_moves(
+            lock, interlocks, n_plates, unprobed, valid_moves, True
+        )
+        if all_solved:
+            # Lock is already solved.
+            break
+        if not valid_moves:
+            # Use centered plates too if there are no other options.
+            _ = _populate_valid_moves(
+                lock, interlocks, n_plates, unprobed, valid_moves, False
             )
         assert valid_moves, "Logic error: no valid moves during probe"
 
@@ -180,6 +187,36 @@ def _cmd_unlock():
             _ = _input("s> ")
 
     print("Solved!")
+
+
+def _populate_valid_moves(
+    lock: int,
+    interlocks: list[int],
+    n_plates: int,
+    unprobed: list[int],
+    valid_moves: list[tuple[int, int, int]],
+    skip_centered: bool,
+) -> bool:
+    n_solved_plates = 0
+    for plate_i in unprobed:
+        plate_pos = _lock_get(lock, plate_i)
+
+        if (
+            skip_centered
+            and (plate_pos == _PLATE_SOLVED)
+            and all(
+                _interlocks_get(interlocks, n_plates, other_plate_i, plate_i) == 0
+                for other_plate_i in range(n_plates)
+                if other_plate_i != plate_i
+            )
+        ):
+            n_solved_plates += 1
+            # Skip centered plates.
+            continue
+
+        valid_moves.extend(_valid_moves(lock, interlocks, n_plates, plate_i, plate_pos))
+
+    return n_solved_plates == len(unprobed)
 
 
 def _input_probe_result(
@@ -473,6 +510,10 @@ def _interlocks_print(matrix: list[int], n_plates: int):
     print("      \\   " + "    " * n_plates + "affected")
     print("       moved by player")
     print()
+
+
+def _interlocks_get(matrix: list[int], n_plates: int, row_i: int, col_i: int) -> int:
+    return matrix[row_i * n_plates + col_i]
 
 
 def _interlocks_iter_cols(

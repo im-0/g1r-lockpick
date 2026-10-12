@@ -16,6 +16,28 @@ echo "**** Time implementation: ${TIME_IMPL}"
 echo "**** Python 3 implementation: ${PY3_IMPL}"
 echo
 
+#
+# Synthetic tests
+#
+
+echo "!!!! Synthetic, Solved 1 plate"
+${CMD} <<EOF
+u
+4
+EOF
+echo
+
+echo "!!!! Synthetic, Solved 7 plates"
+${CMD} <<EOF
+u
+4 4 4 4 4 4 4
+EOF
+echo
+
+#
+# Lock from the game
+#
+
 echo "!!!! New Camp, Cave Tavern Door Lock 02"
 ${CMD} <<EOF
 u
