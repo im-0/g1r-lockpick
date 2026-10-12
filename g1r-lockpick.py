@@ -121,6 +121,16 @@ def _cmd_unlock():
             )
         assert valid_moves, "Logic error: no valid moves during probe"
 
+        # Prefer moves towards the center.
+        valid_moves.sort(
+            key=lambda move: (
+                0
+                if abs(_lock_get(lock, move[1]) - _PLATE_SOLVED)
+                > abs(_lock_get(move[0], move[1]) - _PLATE_SOLVED)
+                else 1
+            )
+        )
+
         try:
             for _, plate_i, dir in valid_moves:
                 if dir == 1:
