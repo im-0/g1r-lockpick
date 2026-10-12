@@ -52,7 +52,7 @@ def _main():
                 except (EOFError, KeyboardInterrupt):
                     print()
             else:
-                print(f"Unknown command {cmd}, enter `h` for help")
+                print(f"Unknown command \"{cmd}\", enter `h` for help")
     except (EOFError, KeyboardInterrupt):
         print()
     exit(last_ret_code)
@@ -136,8 +136,10 @@ def _cmd_unlock():
             lock = lock_initial
 
     print("Detected plate interlocks:")
+    print()
     _interlocks_print(interlocks, n_plates)
     print("Current lock state:")
+    print()
     _lock_print(lock, n_plates)
     print("Solving...")
     solution = _bfs(lock, selected_plate_i, interlocks, n_plates)
@@ -153,8 +155,10 @@ def _cmd_unlock():
         else:
             _lock_print(lock, n_plates, {plate_i: f"-> move right {times}"})
 
-        print(f"Press Enter after applying step {step_i + 1}/{len(solution)}")
-        _ = _input("s> ")
+        step_i += 1
+        if step_i != len(solution):
+            print(f"Press Enter after applying step {step_i}/{len(solution)}")
+            _ = _input("s> ")
 
     print("Solved!")
 
@@ -350,6 +354,8 @@ def _lock_print(state: int, n_plates: int, annotations: dict[int, str] | None = 
     for _ in range(2):
         print("       " + ("  " * _PLATE_MAX) + "|")
 
+    print()
+
 
 def _lock_get(state: int, plate_i: int) -> int:
     return (state >> (plate_i * _PLATE_BITS)) & _PLATE_MASK
@@ -404,6 +410,7 @@ def _interlocks_print(matrix: list[int], n_plates: int):
     print("     \\   " + "    " * n_plates + "\\")
     print("      \\   " + "    " * n_plates + "affected")
     print("       moved by player")
+    print()
 
 
 def _interlocks_iter_cols(matrix: list[int], n_plates: int, row_i: int) -> Generator[int]:
