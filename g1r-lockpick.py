@@ -186,7 +186,7 @@ def _cmd_unlock():
             print(f"Press Enter after applying step {step_i}/{len(solution)}")
             _ = _input("s> ")
 
-    print("Solved!")
+    print(f"Should be solved after step {len(solution)}/{len(solution)}!")
 
 
 def _populate_valid_moves(
