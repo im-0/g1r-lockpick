@@ -4,5 +4,4 @@ Solver for lock picking puzzles from [Gothic 1 Remake](https://en.wikipedia.org/
 
 ## Limitations
 
-* Initial probing is not optimal and might break more lockpicks than actually needed.
 * Solver minimizes plate moves and not player's key presses.
