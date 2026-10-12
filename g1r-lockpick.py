@@ -6,10 +6,11 @@ from sys import exit
 from typing import final
 
 
+# 3 bits per plate packed into 32bit integers.
+# BFS also adds a three-bit plate number.
 _PLATE_BITS = 3
 _PLATE_MASK = (0b1 << _PLATE_BITS) - 1
-# 3 bits per plate packed into 32bit integers.
-_MAX_PLATES = 10
+_MAX_PLATES = 7
 _LOCK_MASK = (0b1 << (_PLATE_BITS * _MAX_PLATES)) - 1
 
 _PLATE_MIN = 1
@@ -81,6 +82,7 @@ def _cmd_unlock():
     lock = lock_initial
     interlocks = _interlocks_new(n_plates)
     unprobed = list(range(n_plates))
+    selected_plate_i = 0
     while unprobed:
         # If there is exactly one plate with pin on the edge - try to probe it first.
         one_edge_plate_found = False
@@ -110,6 +112,7 @@ def _cmd_unlock():
 
                 try:
                     lock = _input_probe_result(lock, interlocks, n_plates, plate_i, dir)
+                    selected_plate_i = plate_i
                     unprobed.remove(plate_i)
                     # State changed => find new valid moves.
                     break
@@ -137,7 +140,7 @@ def _cmd_unlock():
     print("Current lock state:")
     _lock_print(lock, n_plates)
     print("Solving...")
-    solution = _bfs(lock, interlocks, n_plates)
+    solution = _bfs(lock, selected_plate_i, interlocks, n_plates)
     print()
 
     for step_i, (n_shifts, lock, plate_i, dir) in enumerate(solution):
@@ -168,7 +171,7 @@ def _input_probe_result(lock: int, interlocks: list[int], n_plates: int, plate_i
     if (len(shifts) == 2) and (shifts[0] in ("s", "b")):
         stuck_plate = int(shifts[1])
         if stuck_plate < 1:
-            raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} < {1}")
+            raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} < 1")
         if stuck_plate > n_plates:
             raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} > {n_plates}")
         stuck_plate -= 1
@@ -223,33 +226,36 @@ class _ProbeLockpickBroke(Exception):
         self.stuck_plate = stuck_plate
 
 
-def _bfs(lock: int, interlocks: list[int], n_plates: int) -> list[tuple[int, int, int, int]]:
+def _bfs(lock_start: int, selected_plate_i: int, interlocks: list[int], n_plates: int) -> list[tuple[int, int, int, int]]:
     lock_solved = 0
+    plate_shift = _PLATE_BITS * n_plates
+    lock_mask = (0b1 << plate_shift) - 1
     for _ in range(n_plates):
         lock_solved <<= _PLATE_BITS
         lock_solved |= _PLATE_SOLVED
 
-    # TODO: Minimize key presses. This will multiply total number of nodes by 7.
-    n_nodes = 0b1 << (n_plates * _PLATE_BITS)
+    n_nodes = 0b1 << ((n_plates + 1) * _PLATE_BITS)
 
     cur_nodes = [0] * n_nodes
     next_nodes = [0] * n_nodes
     dist = [_U32_MAX] * n_nodes
 
+    lock_start |= selected_plate_i << plate_shift
+
     n_cur_nodes = 1
-    cur_nodes[0] = lock
-    dist[lock] = 0
+    cur_nodes[0] = lock_start
+    dist[lock_start] = 0
 
     while n_cur_nodes:
         n_next_nodes = 0
 
         for cur_node_i in range(n_cur_nodes):
             cur_node = cur_nodes[cur_node_i]
-            if cur_node == lock_solved:
-                n_next_nodes = 0
-                break
+            if cur_node & lock_mask == lock_solved:
+                print(f"Found solution with {dist[cur_node]} key presses")
+                return _bfs_extract_solution(lock_start, plate_shift, lock_mask, cur_node, interlocks, n_plates, dist)
 
-            for neighbor_node, _, _ in _bfs_moves(cur_node, interlocks, n_plates):
+            for neighbor_node, _ in _bfs_moves(cur_node, plate_shift, lock_mask, interlocks, n_plates):
                 if dist[neighbor_node] == _U32_MAX:
                     # Not visited yet.
                     dist[neighbor_node] = dist[cur_node] + 1
@@ -259,25 +265,25 @@ def _bfs(lock: int, interlocks: list[int], n_plates: int) -> list[tuple[int, int
         cur_nodes, next_nodes = next_nodes, cur_nodes
         n_cur_nodes = n_next_nodes
 
-    if dist[lock_solved] == _U32_MAX:
-        raise _Err("No solution found!")
-    else:
-        print(f"Found solution with {dist[lock_solved]} shifts")
-        solution = _bfs_extract_solution(lock, lock_solved, interlocks, n_plates, dist)
-        return solution
+    raise _Err("No solution found!")
 
 
-def _bfs_extract_solution(lock: int, lock_solved: int, interlocks: list[int], n_plates: int, dist: list[int]) -> list[tuple[int, int, int, int]]:
+def _bfs_extract_solution(lock: int, plate_shift: int, lock_mask: int, lock_solved: int, interlocks: list[int], n_plates: int, dist: list[int]) -> list[tuple[int, int, int, int]]:
     steps: list[tuple[int, int, int, int]] = []
     while lock_solved != lock:
         found_step = False
-        for neighbor_node, plate_i, dir in _bfs_moves(lock_solved, interlocks, n_plates):
+        for neighbor_node, dir in _bfs_moves(lock_solved, plate_shift, lock_mask, interlocks, n_plates):
             dir = -dir
+
             if dist[neighbor_node] == dist[lock_solved] - 1:
-                if steps and (steps[-1][2:4] == (plate_i, dir)):
-                    steps[-1] = steps[-1][0] + 1, neighbor_node, plate_i, dir
-                else:
-                    steps.append((1, neighbor_node, plate_i, dir))
+                plate_i = neighbor_node >> plate_shift
+                neighbor_node_plain = neighbor_node & lock_mask
+
+                if dir != 0:
+                    if steps and (steps[-1][2:4] == (plate_i, dir)):
+                        steps[-1] = steps[-1][0] + 1, neighbor_node_plain, plate_i, dir
+                    else:
+                        steps.append((1, neighbor_node_plain, plate_i, dir))
 
                 found_step = True
                 lock_solved = neighbor_node
@@ -287,10 +293,18 @@ def _bfs_extract_solution(lock: int, lock_solved: int, interlocks: list[int], n_
     return steps
 
 
-def _bfs_moves(lock: int, interlocks: list[int], n_plates: int) -> Generator[tuple[int, int, int]]:
-    for plate_i, plate_pos in enumerate(_lock_iter(lock, n_plates)):
-        for next_lock_state, _, dir in _valid_moves(lock, interlocks, n_plates, plate_i, plate_pos):
-            yield next_lock_state, plate_i, dir
+def _bfs_moves(lock: int, plate_shift: int, lock_mask: int, interlocks: list[int], n_plates: int) -> Generator[tuple[int, int]]:
+    plate_i = lock >> plate_shift
+    lock &= lock_mask
+
+    if plate_i > 0:
+        yield lock | ((plate_i - 1) << plate_shift), 0
+    if plate_i < n_plates - 1:
+        yield lock | ((plate_i + 1) << plate_shift), 0
+
+    plate_i_shifted = plate_i << plate_shift
+    for next_lock_state, _, dir in _valid_moves(lock, interlocks, n_plates, plate_i, _lock_get(lock, plate_i)):
+        yield next_lock_state | plate_i_shifted, dir
 
 
 def _valid_moves(lock: int, interlocks: list[int], n_plates: int, plate_i: int, plate_pos: int) -> Generator[tuple[int, int, int]]:

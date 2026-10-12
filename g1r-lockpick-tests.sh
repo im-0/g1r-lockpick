@@ -3,7 +3,7 @@
 set -e -u
 
 # New Camp, Cave Tavern Door Lock 02
-/usr/bin/time pypy3 ./g1r-lockpick.py <<EOF
+/usr/bin/time ./g1r-lockpick.py <<EOF
 u
 5 5 6 2 7 7
 < 0 0 0 0 0
@@ -12,21 +12,6 @@ u
 < 0 > < 0 0
 > 0 0 0 < >
 0 0 > 0 0 <
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
