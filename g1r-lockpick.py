@@ -243,11 +243,11 @@ def _bfs(lock: int, interlocks: list[int], n_plates: int) -> list[tuple[int, int
     while n_cur_nodes:
         n_next_nodes = 0
 
-        solved = False
         for cur_node_i in range(n_cur_nodes):
             cur_node = cur_nodes[cur_node_i]
             if cur_node == lock_solved:
-                solved = True
+                n_next_nodes = 0
+                break
 
             for neighbor_node, _, _ in _bfs_moves(cur_node, interlocks, n_plates):
                 if dist[neighbor_node] == _U32_MAX:
@@ -255,10 +255,6 @@ def _bfs(lock: int, interlocks: list[int], n_plates: int) -> list[tuple[int, int
                     dist[neighbor_node] = dist[cur_node] + 1
                     next_nodes[n_next_nodes] = neighbor_node
                     n_next_nodes += 1
-
-        if solved:
-            # Do not check longer paths.
-            break
 
         cur_nodes, next_nodes = next_nodes, cur_nodes
         n_cur_nodes = n_next_nodes
