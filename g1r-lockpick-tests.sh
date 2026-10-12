@@ -34,6 +34,17 @@ u
 EOF
 echo
 
+echo "!!!! Synthetic, Required connections on centered plates"
+${CMD} <<'EOF'
+u
+1 3 4 4
+< < 0 0
+< < 0 0
+< > < <
+0 0 < <
+EOF
+echo
+
 #
 # Lock from the game
 #
