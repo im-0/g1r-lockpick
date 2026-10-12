@@ -1,6 +1,5 @@
 #!/usr/bin/python3
 
-from array import array
 from collections.abc import Generator
 import readline
 from sys import exit
@@ -183,7 +182,7 @@ def _cmd_unlock():
     print("Solved!")
 
 
-def _input_probe_result(lock: int, interlocks: array[int], n_plates: int, plate_i: int, dir: int) -> int:
+def _input_probe_result(lock: int, interlocks: list[int], n_plates: int, plate_i: int, dir: int) -> int:
     print("and enter the space separated plate shifts [<, 0, >] from bottom left to top right")
     print("or `s` if stuck")
     print("or `b` if lockpick broke")
@@ -229,7 +228,7 @@ def _input_probe_result(lock: int, interlocks: array[int], n_plates: int, plate_
     return lock
 
 
-def _bfs(lock: int, interlocks: array[int], n_plates: int) -> list[tuple[int, int, int, int]]:
+def _bfs(lock: int, interlocks: list[int], n_plates: int) -> list[tuple[int, int, int, int]]:
     lock_solved = 0
     for _ in range(n_plates):
         lock_solved <<= _PLATE_BITS
@@ -238,9 +237,9 @@ def _bfs(lock: int, interlocks: array[int], n_plates: int) -> list[tuple[int, in
     # TODO: Minimize key presses. This will multiply total number of nodes by 7.
     n_nodes = 0b1 << (n_plates * _PLATE_BITS)
 
-    cur_nodes = array("L", [0]) * n_nodes
-    next_nodes = array("L", [0]) * n_nodes
-    dist = array("L", [_U32_MAX]) * n_nodes
+    cur_nodes = [0] * n_nodes
+    next_nodes = [0] * n_nodes
+    dist = [_U32_MAX] * n_nodes
 
     n_cur_nodes = 1
     cur_nodes[0] = lock
@@ -277,7 +276,7 @@ def _bfs(lock: int, interlocks: array[int], n_plates: int) -> list[tuple[int, in
         return solution
 
 
-def _bfs_extract_solution(lock: int, lock_solved: int, interlocks: array[int], n_plates: int, dist: array[int]) -> list[tuple[int, int, int, int]]:
+def _bfs_extract_solution(lock: int, lock_solved: int, interlocks: list[int], n_plates: int, dist: list[int]) -> list[tuple[int, int, int, int]]:
     steps: list[tuple[int, int, int, int]] = []
     while lock_solved != lock:
         found_step = False
@@ -297,7 +296,7 @@ def _bfs_extract_solution(lock: int, lock_solved: int, interlocks: array[int], n
     return steps
 
 
-def _bfs_moves(lock: int, interlocks: array[int], n_plates: int) -> Generator[tuple[int, int, int]]:
+def _bfs_moves(lock: int, interlocks: list[int], n_plates: int) -> Generator[tuple[int, int, int]]:
     for plate_i, plate_pos in enumerate(_lock_iter(lock, n_plates)):
         if plate_pos == _PLATE_MIN:
             dirs = (1, )
@@ -374,11 +373,11 @@ def _lock_from_iter(plates: Generator[int]) -> int:
     return state
 
 
-def _interlocks_new(n_plates: int) -> array[int]:
-    return array("b", (0 for _ in range(n_plates * n_plates)))
+def _interlocks_new(n_plates: int) -> list[int]:
+    return [0] * (n_plates * n_plates)
 
 
-def _interlocks_print(matrix: array[int], n_plates: int):
+def _interlocks_print(matrix: list[int], n_plates: int):
     lines: list[str] = []
     line = ""
     for i, elem in enumerate(matrix):
@@ -402,17 +401,17 @@ def _interlocks_print(matrix: array[int], n_plates: int):
     print("       moved by player")
 
 
-def _interlocks_get(matrix: array[int], n_plates: int, row_i: int, col_i: int) -> int:
+def _interlocks_get(matrix: list[int], n_plates: int, row_i: int, col_i: int) -> int:
     return matrix[row_i * n_plates + col_i]
 
 
-def _interlocks_iter_cols(matrix: array[int], n_plates: int, row_i: int) -> Generator[int]:
+def _interlocks_iter_cols(matrix: list[int], n_plates: int, row_i: int) -> Generator[int]:
     start = row_i * n_plates
     for i in range(start, start + n_plates):
         yield matrix[i]
 
 
-def _interlocks_set(matrix: array[int], n_plates: int, row_i: int, col_i: int, value: int):
+def _interlocks_set(matrix: list[int], n_plates: int, row_i: int, col_i: int, value: int):
     matrix[row_i * n_plates + col_i] = value
 
 
