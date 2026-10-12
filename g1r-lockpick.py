@@ -279,18 +279,11 @@ def _bfs(lock: int, interlocks: array[int], n_plates: int) -> list[tuple[int, in
 
 def _bfs_extract_solution(lock: int, lock_solved: int, interlocks: array[int], n_plates: int, dist: array[int]) -> list[tuple[int, int, int, int]]:
     steps: list[tuple[int, int, int, int]] = []
-    prev_dir = 0
     while lock_solved != lock:
         found_step = False
-
-        moves = list(_bfs_moves(lock_solved, interlocks, n_plates))
-        # Prefer moves in the same direction
-        moves.sort(key=lambda move: 1 if move[2] == prev_dir else 0)
-
-        for neighbor_node, plate_i, dir in moves:
+        for neighbor_node, plate_i, dir in _bfs_moves(lock_solved, interlocks, n_plates):
             dir = -dir
             if dist[neighbor_node] == dist[lock_solved] - 1:
-                prev_dir = dir
                 if steps and (steps[-1][2:4] == (plate_i, dir)):
                     steps[-1] = steps[-1][0] + 1, neighbor_node, plate_i, dir
                 else:
