@@ -18,7 +18,6 @@ _PLATE_SOLVED = 4
 _PLATE_MAX = 7
 
 _STUCK = -1
-_LOCKPICK_BROKE = -2
 
 _U32_MAX = (0b1 << 32) - 1
 
