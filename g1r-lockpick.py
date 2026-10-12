@@ -3,6 +3,7 @@
 from collections.abc import Generator
 import readline
 from sys import exit
+from time import monotonic_ns
 from typing import final
 
 
@@ -142,7 +143,10 @@ def _cmd_unlock():
     print()
     _lock_print(lock, n_plates)
     print("Solving...")
+    time_passed = monotonic_ns()
     solution = _bfs(lock, selected_plate_i, interlocks, n_plates)
+    time_passed = monotonic_ns() - time_passed
+    print(f"Time passed: {time_passed / 1_000_000_000:.03}s ({time_passed}ns)")
     print()
 
     for step_i, (n_shifts, lock, plate_i, dir) in enumerate(solution):
