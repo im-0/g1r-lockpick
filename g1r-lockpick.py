@@ -452,7 +452,9 @@ def _lock_print(state: int, n_plates: int, annotations: dict[int, str] | None = 
 
     for plate_i in reversed(range(n_plates)):
         plate_off = _lock_get(state, plate_i) - 1
-        plate = ["O" if i == plate_off else "-" for i in range(_PLATE_MAX)]
+        plate = [
+            str(plate_off + 1) if i == plate_off else "-" for i in range(_PLATE_MAX)
+        ]
         plate = " ".join(plate)
 
         annotation = annotations.get(plate_i)
