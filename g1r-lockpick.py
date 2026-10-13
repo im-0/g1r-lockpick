@@ -3,6 +3,7 @@
 import atexit
 import readline
 from collections.abc import Iterable
+from math import ceil, log2
 from os import path
 from pathlib import Path
 from sys import exit
@@ -322,23 +323,19 @@ def _bfs(
     plate_shift = _PLATE_BITS * n_plates
     lock_mask = (0b1 << plate_shift) - 1
 
-    n_nodes = 0b1 << ((n_plates + 1) * _PLATE_BITS)
-
-    cur_nodes = [0] * n_nodes
-    next_nodes = [0] * n_nodes
-    dist = [_U32_MAX] * n_nodes
+    plate_i_bits = ceil(log2(n_plates))
+    dist_storage_len = 0b1 << (n_plates * _PLATE_BITS + plate_i_bits)
+    dist = [_U32_MAX] * dist_storage_len
 
     lock_start |= selected_plate_i << plate_shift
 
-    n_cur_nodes = 1
-    cur_nodes[0] = lock_start
+    cur_nodes = [lock_start]
     dist[lock_start] = 0
 
-    while n_cur_nodes:
-        n_next_nodes = 0
+    while cur_nodes:
+        next_nodes: list[int] = []
 
-        for cur_node_i in range(n_cur_nodes):
-            cur_node = cur_nodes[cur_node_i]
+        for cur_node in cur_nodes:
             if cur_node & lock_mask == lock_solved:
                 print(f"Found solution with {dist[cur_node]} key presses")
                 return _bfs_extract_solution(
@@ -357,11 +354,9 @@ def _bfs(
                 if dist[neighbor_node] == _U32_MAX:
                     # Not visited yet.
                     dist[neighbor_node] = dist[cur_node] + 1
-                    next_nodes[n_next_nodes] = neighbor_node
-                    n_next_nodes += 1
+                    next_nodes.append(neighbor_node)
 
-        cur_nodes, next_nodes = next_nodes, cur_nodes
-        n_cur_nodes = n_next_nodes
+        cur_nodes = next_nodes
 
     raise _Err("No solution found!")
 
