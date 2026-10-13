@@ -1,10 +1,16 @@
 #!/usr/bin/python3
 
+import atexit
 import readline
 from collections.abc import Generator
+from os import path
+from pathlib import Path
 from sys import exit
 from time import monotonic_ns
 from typing import final
+
+_READLINE_HISTORY_FILE = path.join(Path.home(), ".g1r-lockpick.history")
+_READLINE_HISTORY_LEN = 1000
 
 # 3 bits per plate packed into 32bit integers.
 # BFS also adds a three-bit plate number.
@@ -23,6 +29,13 @@ _U32_MAX = (0b1 << 32) - 1
 
 
 def _main():
+    try:
+        readline.read_history_file(_READLINE_HISTORY_FILE)
+    except OSError:
+        pass
+    readline.set_history_length(_READLINE_HISTORY_LEN)
+    _ = atexit.register(readline.write_history_file, _READLINE_HISTORY_FILE)
+
     print("`h` for help")
     last_ret_code = 0
     try:
