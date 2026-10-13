@@ -2,7 +2,7 @@
 
 import atexit
 import readline
-from collections.abc import Generator
+from collections.abc import Iterable
 from os import path
 from pathlib import Path
 from sys import exit
@@ -405,7 +405,7 @@ def _bfs_extract_solution(
 
 def _bfs_moves(
     lock: int, plate_shift: int, lock_mask: int, interlocks: list[int], n_plates: int
-) -> Generator[tuple[int, int]]:
+) -> Iterable[tuple[int, int]]:
     plate_i = lock >> plate_shift
     lock &= lock_mask
 
@@ -423,7 +423,7 @@ def _bfs_moves(
 
 def _valid_moves(
     lock: int, interlocks: list[int], n_plates: int, plate_i: int, plate_pos: int
-) -> Generator[tuple[int, int, int]]:
+) -> Iterable[tuple[int, int, int]]:
     if plate_pos == _PLATE_MIN:
         dirs = (1,)
     elif plate_pos == _PLATE_MAX:
@@ -482,7 +482,7 @@ def _lock_get(state: int, plate_i: int) -> int:
     return (state >> (plate_i * _PLATE_BITS)) & _PLATE_MASK
 
 
-def _lock_iter(state: int, n_plates: int) -> Generator[int]:
+def _lock_iter(state: int, n_plates: int) -> Iterable[int]:
     for _ in range(n_plates):
         yield state & _PLATE_MASK
         state >>= _PLATE_BITS
@@ -493,7 +493,7 @@ def _lock_set(state: int, plate_i: int, plate_pos: int) -> int:
     return state & (_LOCK_MASK ^ (_PLATE_MASK << shift)) | (plate_pos << shift)
 
 
-def _lock_from_iter(plates: Generator[int]) -> int:
+def _lock_from_iter(plates: Iterable[int]) -> int:
     state = 0
     for plate_i, plate_pos in enumerate(plates):
         if (plate_pos < _PLATE_MIN) or (plate_pos > _PLATE_MAX):
@@ -540,7 +540,7 @@ def _interlocks_get(matrix: list[int], n_plates: int, row_i: int, col_i: int) ->
 
 def _interlocks_iter_cols(
     matrix: list[int], n_plates: int, row_i: int
-) -> Generator[int]:
+) -> Iterable[int]:
     start = row_i * n_plates
     for i in range(start, start + n_plates):
         yield matrix[i]
