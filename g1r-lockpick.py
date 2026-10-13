@@ -500,17 +500,17 @@ def _interlocks_new(n_plates: int) -> list[int]:
 
 
 def _interlocks_print(matrix: list[int], n_plates: int, unprobed: list[int]):
-    plane_i = 0
+    plate_i = 0
     lines: list[str] = []
     line = ""
     for i, elem in enumerate(matrix):
-        if (elem == 0) and (plane_i in unprobed):
+        if (elem == 0) and (plate_i in unprobed):
             line += " ? "
         else:
             line += (" . ", " > ", " < ")[elem]
 
         if (i + 1) % n_plates == 0:
-            plane_i += 1
+            plate_i += 1
             lines.append(line)
             line = ""
 
