@@ -3,7 +3,6 @@
 import atexit
 import readline
 from collections.abc import Iterable
-from math import ceil, log2
 from os import path
 from pathlib import Path
 from sys import exit
@@ -23,8 +22,6 @@ _LOCK_MASK = (0b1 << (_PLATE_BITS * _MAX_PLATES)) - 1
 _PLATE_MIN = 1
 _PLATE_SOLVED = 4
 _PLATE_MAX = 7
-
-_STUCK = -1
 
 _U32_MAX = (0b1 << 32) - 1
 
@@ -106,7 +103,6 @@ def _cmd_unlock():
     lock = lock_initial
     interlocks = _interlocks_new(n_plates)
     unprobed = list(range(n_plates))
-    selected_plate_i = 0
     while unprobed and (lock != lock_solved):
         # If there is exactly one plate with pin on the edge - try to probe it first.
         one_edge_plate_found = False
@@ -154,7 +150,6 @@ def _cmd_unlock():
 
                 try:
                     lock = _input_probe_result(lock, interlocks, n_plates, plate_i, dir)
-                    selected_plate_i = plate_i
                     unprobed.remove(plate_i)
                     _interlocks_print(interlocks, n_plates, unprobed)
                     # State changed => find new valid moves.
@@ -189,17 +184,17 @@ def _cmd_unlock():
     _lock_print(lock, n_plates)
     print("Solving...")
     time_passed = monotonic_ns()
-    solution = _bfs(lock, lock_solved, selected_plate_i, interlocks, n_plates)
+    solution = _bfs(lock, lock_solved, interlocks, n_plates)
     time_passed = monotonic_ns() - time_passed
     print(f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)")
     print()
 
-    for step_i, (n_shifts, lock, plate_i, dir) in enumerate(solution):
-        if n_shifts == 1:
+    for step_i, (lock, plate_i, plate_off) in enumerate(solution):
+        if abs(plate_off) == 1:
             times = "1 time"
         else:
-            times = f"{n_shifts} times"
-        if dir == 1:
+            times = f"{abs(plate_off)} times"
+        if plate_off > 0:
             _lock_print(lock, n_plates, {plate_i: f"<- move left {times}"})
         else:
             _lock_print(lock, n_plates, {plate_i: f"-> move right {times}"})
@@ -316,102 +311,100 @@ class _ProbeLockpickBroke(Exception):
 def _bfs(
     lock_start: int,
     lock_solved: int,
-    selected_plate_i: int,
     interlocks: list[int],
     n_plates: int,
-) -> list[tuple[int, int, int, int]]:
-    plate_shift = _PLATE_BITS * n_plates
-    lock_mask = (0b1 << plate_shift) - 1
-
-    plate_i_bits = ceil(log2(n_plates))
-    dist_storage_len = 0b1 << (n_plates * _PLATE_BITS + plate_i_bits)
-    dist = [_U32_MAX] * dist_storage_len
-
-    lock_start |= selected_plate_i << plate_shift
+) -> list[tuple[int, int, int]]:
+    n_nodes = 0b1 << (n_plates * _PLATE_BITS)
+    dist = [_U32_MAX] * n_nodes
 
     cur_nodes = [lock_start]
+    next_nodes = []
     dist[lock_start] = 0
+    moves: list[tuple[int, int, int]] = []
 
     while cur_nodes:
-        next_nodes: list[int] = []
-
-        for cur_node in cur_nodes:
-            if cur_node & lock_mask == lock_solved:
-                print(f"Found solution with {dist[cur_node]} key presses")
+        while cur_nodes:
+            cur_node = cur_nodes.pop()
+            if cur_node == lock_solved:
                 return _bfs_extract_solution(
                     lock_start,
-                    plate_shift,
-                    lock_mask,
                     cur_node,
                     interlocks,
                     n_plates,
                     dist,
                 )
 
-            for neighbor_node, _ in _bfs_moves(
-                cur_node, plate_shift, lock_mask, interlocks, n_plates
-            ):
-                if dist[neighbor_node] == _U32_MAX:
+            _bfs_populate_moves(cur_node, interlocks, n_plates, moves)
+            while moves:
+                lock, _, _ = moves.pop()
+                if dist[lock] == _U32_MAX:
                     # Not visited yet.
-                    dist[neighbor_node] = dist[cur_node] + 1
-                    next_nodes.append(neighbor_node)
+                    dist[lock] = dist[cur_node] + 1
+                    next_nodes.append(lock)
 
-        cur_nodes = next_nodes
+        cur_nodes, next_nodes = next_nodes, cur_nodes
 
     raise _Err("No solution found!")
 
 
 def _bfs_extract_solution(
-    lock: int,
-    plate_shift: int,
-    lock_mask: int,
+    lock_start: int,
     lock_solved: int,
     interlocks: list[int],
     n_plates: int,
     dist: list[int],
-) -> list[tuple[int, int, int, int]]:
-    steps: list[tuple[int, int, int, int]] = []
-    while lock_solved != lock:
+) -> list[tuple[int, int, int]]:
+    steps: list[tuple[int, int, int]] = []
+    while lock_solved != lock_start:
         found_step = False
-        for neighbor_node, dir in _bfs_moves(
-            lock_solved, plate_shift, lock_mask, interlocks, n_plates
-        ):
-            dir = -dir
 
-            if dist[neighbor_node] == dist[lock_solved] - 1:
-                plate_i = neighbor_node >> plate_shift
-                neighbor_node_plain = neighbor_node & lock_mask
+        moves: list[tuple[int, int, int]] = []
+        _bfs_populate_moves(lock_solved, interlocks, n_plates, moves)
+        for lock, plate_i, plate_off in moves:
+            plate_off = -plate_off
 
-                if dir != 0:
-                    if steps and (steps[-1][2:4] == (plate_i, dir)):
-                        steps[-1] = steps[-1][0] + 1, neighbor_node_plain, plate_i, dir
-                    else:
-                        steps.append((1, neighbor_node_plain, plate_i, dir))
+            if dist[lock] == dist[lock_solved] - 1:
+                steps.append((lock, plate_i, plate_off))
 
                 found_step = True
-                lock_solved = neighbor_node
+                lock_solved = lock
                 break
         assert found_step, "Logic error: unable to extract solution"
     steps.reverse()
     return steps
 
 
-def _bfs_moves(
-    lock: int, plate_shift: int, lock_mask: int, interlocks: list[int], n_plates: int
-) -> Iterable[tuple[int, int]]:
-    plate_i = lock >> plate_shift
-    lock &= lock_mask
+def _bfs_populate_moves(
+    lock: int, interlocks: list[int], n_plates: int, moves: list[tuple[int, int, int]]
+):
+    for plate_i in range(n_plates):
+        for dir in (-1, 1):
+            for plate_off in range(1, _PLATE_MAX):
+                plate_off *= dir
 
-    if plate_i > 0:
-        yield lock | ((plate_i - 1) << plate_shift), 0
-    if plate_i < n_plates - 1:
-        yield lock | ((plate_i + 1) << plate_shift), 0
+                next_lock = lock
+                for next_lock_plate_i in range(n_plates):
+                    effect_dir = interlocks[plate_i * n_plates + next_lock_plate_i]
+                    if effect_dir == 0:
+                        continue
 
-    plate_i_shifted = plate_i << plate_shift
-    for next_lock_state, _, dir in _valid_moves(
-        lock, interlocks, n_plates, plate_i, _lock_get(lock, plate_i)
-    ):
-        yield next_lock_state | plate_i_shifted, dir
+                    next_lock_plate_shift = next_lock_plate_i * _PLATE_BITS
+
+                    next_lock_plate_pos = (lock >> next_lock_plate_shift) & _PLATE_MASK
+                    next_lock_plate_pos += plate_off * effect_dir
+                    if (next_lock_plate_pos < _PLATE_MIN) or (
+                        next_lock_plate_pos > _PLATE_MAX
+                    ):
+                        next_lock = None
+                        break
+
+                    next_lock = next_lock & (
+                        ~(_PLATE_MASK << next_lock_plate_shift)
+                    ) | (next_lock_plate_pos << next_lock_plate_shift)
+
+                if next_lock is None:
+                    break
+                moves.append((next_lock, plate_i, plate_off))
 
 
 def _valid_moves(
@@ -429,12 +422,12 @@ def _valid_moves(
             (
                 affected_pos + dir * effect_dir
                 for affected_pos, effect_dir in zip(
-                    _lock_iter(lock, n_plates),
+                    _lock_plates(lock, n_plates),
                     _interlocks_iter_cols(interlocks, n_plates, plate_i),
                 )
             )
         )
-        if next_lock_state == _STUCK:
+        if next_lock_state is None:
             continue
         yield next_lock_state, plate_i, dir
 
@@ -475,22 +468,24 @@ def _lock_get(state: int, plate_i: int) -> int:
     return (state >> (plate_i * _PLATE_BITS)) & _PLATE_MASK
 
 
-def _lock_iter(state: int, n_plates: int) -> Iterable[int]:
-    for _ in range(n_plates):
-        yield state & _PLATE_MASK
+def _lock_plates(state: int, n_plates: int) -> list[int]:
+    plates = [0] * n_plates
+    for plate_i in range(n_plates):
+        plates[plate_i] = state & _PLATE_MASK
         state >>= _PLATE_BITS
+    return plates
 
 
 def _lock_set(state: int, plate_i: int, plate_pos: int) -> int:
     shift = plate_i * _PLATE_BITS
-    return state & (_LOCK_MASK ^ (_PLATE_MASK << shift)) | (plate_pos << shift)
+    return state & (~(_PLATE_MASK << shift)) | (plate_pos << shift)
 
 
-def _lock_from_iter(plates: Iterable[int]) -> int:
+def _lock_from_iter(plates: Iterable[int]) -> int | None:
     state = 0
     for plate_i, plate_pos in enumerate(plates):
         if (plate_pos < _PLATE_MIN) or (plate_pos > _PLATE_MAX):
-            return _STUCK
+            return None
         state |= plate_pos << (plate_i * _PLATE_BITS)
     return state
 
