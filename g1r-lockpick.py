@@ -276,11 +276,11 @@ def _input_probe_result(
         plate_pos = _lock_get(lock, shift_i) + shift_dir
         if plate_pos < _PLATE_MIN:
             raise _Err(
-                f"Plate #{plate_i + 1} cannot move in this direction, already at the left edge"
+                f"Plate #{shift_i + 1} cannot move in this direction, already at the left edge"
             )
         if plate_pos > _PLATE_MAX:
             raise _Err(
-                f"Plate #{plate_i + 1} cannot move in this direction, already at the right edge"
+                f"Plate #{shift_i + 1} cannot move in this direction, already at the right edge"
             )
         lock = _lock_set(lock, shift_i, plate_pos)
 
