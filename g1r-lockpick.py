@@ -327,7 +327,6 @@ def _bfs(
             cur_node = cur_nodes.pop()
             if cur_node == lock_solved:
                 return _bfs_extract_solution(
-                    lock_start,
                     cur_node,
                     interlocks,
                     n_plates,
@@ -349,14 +348,13 @@ def _bfs(
 
 
 def _bfs_extract_solution(
-    lock_start: int,
     lock_solved: int,
     interlocks: list[int],
     n_plates: int,
     dist: list[int],
 ) -> list[tuple[int, int, int]]:
     steps: list[tuple[int, int, int]] = []
-    while lock_solved != lock_start:
+    while dist[lock_solved]:
         found_step = False
 
         moves: list[tuple[int, int, int]] = []
