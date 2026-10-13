@@ -13,7 +13,6 @@ _READLINE_HISTORY_FILE = path.join(Path.home(), ".g1r-lockpick.history")
 _READLINE_HISTORY_LEN = 1000
 
 # 3 bits per plate packed into 32bit integers.
-# BFS also adds a three-bit plate number.
 _PLATE_BITS = 3
 _PLATE_MASK = (0b1 << _PLATE_BITS) - 1
 _MAX_PLATES = 7
