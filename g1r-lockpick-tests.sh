@@ -38,10 +38,10 @@ echo "!!!! Synthetic, Required connections on centered plates"
 ${CMD} <<'EOF'
 u
 1 3 4 4
-< < 0 0
-< < 0 0
+< < . .
+< < . .
 < > < <
-0 0 > >
+. . > >
 EOF
 echo
 
@@ -49,7 +49,7 @@ echo "!!!! Synthetic, Solved by probe moving left"
 ${CMD} <<EOF
 u
 4 3
-0 <
+. <
 EOF
 echo
 
@@ -57,7 +57,7 @@ echo "!!!! Synthetic, Solved by probe moving right"
 ${CMD} <<EOF
 u
 4 5
-0 >
+. >
 EOF
 echo
 
@@ -69,15 +69,15 @@ echo "!!!! New Camp, Cave Tavern Door Lock 02"
 ${CMD} <<EOF
 u
 5 5 6 2 7 7
-> 0 0 0 0 0
+> . . . . .
 s 6
 b 6
-< 0 > < 0 0
+< . > < . .
 s 6
-0 0 < 0 0 >
-< 0 0 0 > <
-0 < < 0 0 >
-0 < > 0 > <
+. . < . . >
+< . . . > <
+. < < . . >
+. < > . > <
 
 
 

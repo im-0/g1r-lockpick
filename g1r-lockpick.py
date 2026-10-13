@@ -155,6 +155,7 @@ def _cmd_unlock():
                     lock = _input_probe_result(lock, interlocks, n_plates, plate_i, dir)
                     selected_plate_i = plate_i
                     unprobed.remove(plate_i)
+                    _interlocks_print(interlocks, n_plates, unprobed)
                     # State changed => find new valid moves.
                     break
                 except (_ProbeStuck, _ProbeLockpickBroke) as e:
@@ -182,9 +183,6 @@ def _cmd_unlock():
             # Some plate stuck and lockpick broke => restart with initial lock state.
             lock = lock_initial
 
-    print("Detected plate interlocks:")
-    print()
-    _interlocks_print(interlocks, n_plates)
     print("Current lock state:")
     print()
     _lock_print(lock, n_plates)
@@ -243,7 +241,7 @@ def _input_probe_result(
     lock: int, interlocks: list[int], n_plates: int, plate_i: int, dir: int
 ) -> int:
     print(
-        "and enter the space separated plate shifts [<, 0, >] from bottom left to top right"
+        "and enter the space separated plate shifts [<, ., >] from bottom left to top right"
     )
     print(f"or `s <STUCK PLATE [1..{n_plates}]>` if stuck")
     print(f"or `b <STUCK PLATE [1..{n_plates}]>` if lockpick broke")
@@ -271,7 +269,7 @@ def _input_probe_result(
     for shift_i, shift in enumerate(shifts):
         if shift == "<":
             shift_dir = 1
-        elif shift == "0":
+        elif shift == ".":
             shift_dir = 0
         elif shift == ">":
             shift_dir = -1
@@ -509,27 +507,29 @@ def _interlocks_new(n_plates: int) -> list[int]:
     return matrix
 
 
-def _interlocks_print(matrix: list[int], n_plates: int):
+def _interlocks_print(matrix: list[int], n_plates: int, unprobed: list[int]):
+    plane_i = 0
     lines: list[str] = []
     line = ""
     for i, elem in enumerate(matrix):
-        if elem == 0:
-            line += "    "
+        if (elem == 0) and (plane_i in unprobed):
+            line += " ? "
         else:
-            line += f" {elem: >2} "
+            line += (" . ", " > ", " < ")[elem]
 
         if (i + 1) % n_plates == 0:
+            plane_i += 1
             lines.append(line)
             line = ""
 
-    print("          " + "----" * n_plates)
+    print("          " + "---" * n_plates)
     for i, line in reversed(list(enumerate(lines))):
         print(f"    {i + 1} -- |{line}|")
-    print("    |     " + "----" * n_plates)
-    print("    |     " + "  | " * n_plates)
-    print("    \\     " + "".join(f"  {i + 1} " for i in range(n_plates)))
-    print("     \\   " + "    " * n_plates + "\\")
-    print("      \\   " + "    " * n_plates + "affected")
+    print("    |     " + "---" * n_plates)
+    print("    |     " + " | " * n_plates)
+    print("    \\     " + "".join(f" {i + 1} " for i in range(n_plates)))
+    print("     \\   " + "   " * n_plates + "\\")
+    print("      \\   " + "   " * n_plates + "affected")
     print("       moved by player")
     print()
 
