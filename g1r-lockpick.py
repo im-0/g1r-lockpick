@@ -320,6 +320,7 @@ def _bfs(
     cur_nodes = [lock_start]
     next_nodes = []
     dist[lock_start] = 0
+    next_dist = 1
     moves: list[tuple[int, int, int]] = []
 
     while cur_nodes:
@@ -339,10 +340,11 @@ def _bfs(
                 lock, _, _ = moves.pop()
                 if dist[lock] == _U32_MAX:
                     # Not visited yet.
-                    dist[lock] = dist[cur_node] + 1
+                    dist[lock] = next_dist
                     next_nodes.append(lock)
 
         cur_nodes, next_nodes = next_nodes, cur_nodes
+        next_dist += 1
 
     raise _Err("No solution found!")
 
