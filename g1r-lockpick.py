@@ -143,9 +143,9 @@ def _probe_interlocks(
             _ = _input("s> ")
 
         lock, plate_i, plate_off = solution[-1]
-        _print_plate_move(lock, n_plates, plate_i, plate_off)
-
         dir = plate_off // abs(plate_off)
+        _print_plate_move(lock, n_plates, plate_i, dir)
+
         try:
             lock = _input_probe_result(lock, interlocks, n_plates, plate_i, dir)
             unprobed = _bits_unset(unprobed, plate_i)
@@ -227,10 +227,41 @@ def _bfs_probe(
     assert False, "Logic error: probe BFS failed"
 
 
+def _bfs_probe_extract_solution(
+    lock_solved: int,
+    interlocks: list[int],
+    n_plates: int,
+    dist: dict[tuple[int, int], int],
+    unprobed_solved: int,
+) -> list[tuple[int, int, int]]:
+    solution: list[tuple[int, int, int]] = []
+    while dist[(lock_solved, unprobed_solved)]:
+        found_step = False
+
+        moves: list[tuple[int, int, int]] = []
+        _bfs_probe_populate_moves(lock_solved, interlocks, n_plates, moves)
+        for lock, plate_i, plate_off in moves:
+            plate_off = -plate_off
+
+            for unprobed in (unprobed_solved, _bits_set(unprobed_solved, plate_i)):
+                if (
+                    dist.get((lock, unprobed))
+                    == dist[(lock_solved, unprobed_solved)] - 1
+                ):
+                    solution.append((lock, plate_i, plate_off))
+
+                    found_step = True
+                    lock_solved = lock
+                    unprobed_solved = unprobed
+                    break
+        assert found_step, "Logic error: unable to extract probe solution"
+    solution.reverse()
+    return solution
+
+
 def _bfs_probe_populate_moves(
     lock: int, interlocks: list[int], n_plates: int, moves: list[tuple[int, int, int]]
 ):
-    # This already adds small movements first.
     _bfs_populate_moves(lock, interlocks, n_plates, moves)
 
     # Prefer moves towards center.
@@ -253,37 +284,6 @@ def _bfs_probe_populate_moves(
                 edge_plate_i = ()
     if edge_plate_i not in (None, ()):
         moves.sort(key=lambda m: 0 if m[1] == edge_plate_i else 1)
-
-
-def _bfs_probe_extract_solution(
-    lock_solved: int,
-    interlocks: list[int],
-    n_plates: int,
-    dist: dict[tuple[int, int], int],
-    unprobed_solved: int,
-) -> list[tuple[int, int, int]]:
-    solution: list[tuple[int, int, int]] = []
-    while dist[(lock_solved, unprobed_solved)]:
-        found_step = False
-
-        moves: list[tuple[int, int, int]] = []
-        _bfs_populate_moves(lock_solved, interlocks, n_plates, moves)
-        for lock, plate_i, plate_off in moves:
-            plate_off = -plate_off
-
-            for unprobed in (unprobed_solved, _bits_set(unprobed_solved, plate_i)):
-                if (
-                    dist.get((lock, unprobed))
-                    == dist[(lock_solved, unprobed_solved)] - 1
-                ):
-                    solution.append((lock, plate_i, plate_off))
-
-                    found_step = True
-                    lock_solved = lock
-                    unprobed_solved = unprobed
-        assert found_step, "Logic error: unable to extract probe solution"
-    solution.reverse()
-    return solution
 
 
 def _input_probe_result(
