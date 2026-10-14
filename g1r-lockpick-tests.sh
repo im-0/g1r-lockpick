@@ -91,5 +91,77 @@ s 6
 EOF
 echo
 
+echo "!!!! New Camp, Gorn Chest"
+${CMD} <<EOF
+u
+4 5 7 6 6 1
+s 6
+. . > < < .
+. . . > . .
+s 6
+> . . . . <
+. . < > > >
+< . . . > .
+. < . > > <
+
+
+
+
+
+
+EOF
+echo
+
+echo "!!!! Old Camp, Skip Chest"
+${CMD} <<EOF
+u
+1 4 1 6 4 1
+s 3
+. . < . > .
+< > > . . .
+. < . . . .
+s 3
+. . . < < .
+. > . . . <
+
+. . < < < <
+
+
+
+
+
+
+
+
+EOF
+echo
+
+echo "!!!! Old Camp, Raven Chest"
+${CMD} <<EOF
+u
+7 6 4 7 2 7 5
+s 4
+. > . . . . .
+. . . > . . .
+s 6
+s 1
+. . . < > > .
+. . . . . . >
+> . > . . . .
+s 4
+< . . > . > .
+
+> . < > > > <
+
+
+
+
+
+
+
+
+EOF
+echo
+
 echo
 echo "**** All tests passed!"
