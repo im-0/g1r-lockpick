@@ -121,7 +121,9 @@ def _cmd_unlock():
     print(f"Should be solved after step {len(solution)}/{len(solution)}!")
 
 
-def _probe_interlocks(lock_initial: int, lock_solved: int, n_plates: int) -> tuple[int, list[int]]:
+def _probe_interlocks(
+    lock_initial: int, lock_solved: int, n_plates: int
+) -> tuple[int, list[int]]:
     lock = lock_initial
     interlocks = _interlocks_new(n_plates)
     unprobed = _bits_from_iter(range(n_plates))
@@ -201,10 +203,7 @@ def _bfs_probe(
                     cur_unprobed,
                 )
 
-            # TODO: Prefer moving edge plates if there is exactly one.
-            # TODO: Prefer moves towards center.
-            # TODO: Prefer small moves.
-            _bfs_populate_moves(cur_node, interlocks, n_plates, moves)
+            _bfs_probe_populate_moves(cur_node, interlocks, n_plates, moves)
             while moves:
                 lock, plate_i, _ = moves.pop()
                 unprobed = _bits_unset(cur_unprobed, plate_i)
@@ -217,6 +216,34 @@ def _bfs_probe(
         next_dist += 1
 
     assert False, "Logic error: probe BFS failed"
+
+
+def _bfs_probe_populate_moves(
+    lock: int, interlocks: list[int], n_plates: int, moves: list[tuple[int, int, int]]
+):
+    # This already adds small movements first.
+    _bfs_populate_moves(lock, interlocks, n_plates, moves)
+
+    # Prefer moves towards center.
+    moves.sort(
+        key=lambda m: (
+            0
+            if abs(_PLATE_SOLVED - _lock_get(m[0], m[1]))
+            < abs(_PLATE_SOLVED - _lock_get(lock, m[1]))
+            else 1
+        )
+    )
+
+    # Prefer moving edge plate if there is exactly one.
+    edge_plate_i = None
+    for plate_i in range(n_plates):
+        if _lock_get(lock, plate_i) in (_PLATE_MIN, _PLATE_MAX):
+            if edge_plate_i is None:
+                edge_plate_i = plate_i
+            else:
+                edge_plate_i = ()
+    if edge_plate_i not in (None, ()):
+        moves.sort(key=lambda m: 0 if m[1] == edge_plate_i else 1)
 
 
 def _bfs_probe_extract_first_step(
@@ -241,7 +268,6 @@ def _bfs_probe_extract_first_step(
 
                 lock_solved = lock
                 unprobed_solved = unprobed
-                break
         assert first_step, "Logic error: unable to extract first step"
     return first_step
 
