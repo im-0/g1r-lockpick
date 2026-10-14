@@ -583,6 +583,8 @@ class _Err(Exception):
 
 def _input(prompt: str) -> str:
     result = input(prompt)
+    if not stdin.isatty():
+        print(result)
     print()
     return result
 
