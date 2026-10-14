@@ -155,9 +155,13 @@ def _probe_interlocks(
             if stuck_plate_pos == _PLATE_MIN:
                 # Plate tried to move right.
                 stuck_plate_dir = -1
-            else:
+            elif stuck_plate_pos == _PLATE_MAX:
                 # Plate tried to move left.
                 stuck_plate_dir = 1
+            else:
+                raise _Err(
+                    f"Plate #{e.stuck_plate + 1} cannot be stuck: pin is not in edge position"
+                )
             _interlocks_set(
                 interlocks,
                 n_plates,
