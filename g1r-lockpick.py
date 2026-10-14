@@ -216,6 +216,7 @@ def _bfs_probe(
     moves: list[tuple[int, int, int]] = []
 
     while cur_nodes:
+        # TODO: Apply heuristics here on `cur_nodes` instead of inside `_bfs_probe_populate_moves()`.
         while cur_nodes:
             cur_node, cur_unprobed = cur_nodes.pop()
             if (cur_unprobed != unprobed_start) or (cur_unprobed == 0):
