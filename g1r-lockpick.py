@@ -5,7 +5,7 @@ import readline
 from collections.abc import Iterable
 from os import path
 from pathlib import Path
-from sys import exit
+from sys import exit, stderr, stdin, stdout
 from time import monotonic_ns
 from typing import final
 
@@ -26,12 +26,7 @@ _U32_MAX = (0b1 << 32) - 1
 
 
 def _main():
-    try:
-        readline.read_history_file(_READLINE_HISTORY_FILE)
-    except OSError:
-        pass
-    readline.set_history_length(_READLINE_HISTORY_LEN)
-    _ = atexit.register(readline.write_history_file, _READLINE_HISTORY_FILE)
+    _init_readline()
 
     print("`h` for help")
     last_ret_code = 0
@@ -65,6 +60,22 @@ def _main():
     except (EOFError, KeyboardInterrupt):
         print()
     exit(last_ret_code)
+
+
+def _init_readline():
+    if not (stdin.isatty() and stdout.isatty()):
+        return
+
+    try:
+        try:
+            readline.read_history_file(_READLINE_HISTORY_FILE)
+        except OSError:
+            pass
+
+        readline.set_history_length(_READLINE_HISTORY_LEN)
+        _ = atexit.register(readline.write_history_file, _READLINE_HISTORY_FILE)
+    except Exception as e:  # noqa: BLE001
+        print(f"readline initialization failed: {e}", file=stderr)
 
 
 def _cmd_unlock():
