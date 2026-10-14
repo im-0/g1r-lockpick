@@ -261,13 +261,16 @@ def _bfs_probe_extract_first_step(
         _bfs_populate_moves(lock_solved, interlocks, n_plates, moves)
         for lock, plate_i, plate_off in moves:
             plate_off = -plate_off
-            unprobed = _bits_set(unprobed_solved, plate_i)
 
-            if dist.get((lock, unprobed)) == dist[(lock_solved, unprobed_solved)] - 1:
-                first_step = plate_i, plate_off
+            for unprobed in (unprobed_solved, _bits_set(unprobed_solved, plate_i)):
+                if (
+                    dist.get((lock, unprobed))
+                    == dist[(lock_solved, unprobed_solved)] - 1
+                ):
+                    first_step = plate_i, plate_off
 
-                lock_solved = lock
-                unprobed_solved = unprobed
+                    lock_solved = lock
+                    unprobed_solved = unprobed
         assert first_step, "Logic error: unable to extract first step"
     return first_step
 
