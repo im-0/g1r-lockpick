@@ -79,12 +79,7 @@ def _cmd_unlock():
     if n_plates > _MAX_PLATES:
         raise _Err(f"Too many plates: got {n_plates} but maximum is {_MAX_PLATES}")
 
-    lock_solved = 0
-    for _ in range(n_plates):
-        lock_solved <<= _PLATE_BITS
-        lock_solved |= _PLATE_SOLVED
-
-    lock_initial = 0
+    lock = 0
     for plate_i, plate_pos in enumerate(plates):
         plate_pos = int(plate_pos)
         if plate_pos < _PLATE_MIN:
@@ -96,87 +91,14 @@ def _cmd_unlock():
                 f"Value of plate #{plate_i + 1} is wrong: got {plate_pos} > {_PLATE_MAX}"
             )
 
-        lock_initial = _lock_set(lock_initial, plate_i, plate_pos)
+        lock = _lock_set(lock, plate_i, plate_pos)
 
-    # Try to detect plate connections.
-    lock = lock_initial
-    interlocks = _interlocks_new(n_plates)
-    unprobed = list(range(n_plates))
-    while unprobed and (lock != lock_solved):
-        # If there is exactly one plate with pin on the edge - try to probe it first.
-        one_edge_plate_found = False
-        edge_plate_i = None
-        for plate_i in range(n_plates):
-            plate_pos = _lock_get(lock, plate_i)
-            if plate_pos in (_PLATE_MIN, _PLATE_MAX):
-                if one_edge_plate_found:
-                    edge_plate_i = None
-                else:
-                    one_edge_plate_found = True
-                    edge_plate_i = plate_i
-        unprobed.sort(
-            key=lambda unprobed_plate_i: 0 if unprobed_plate_i == edge_plate_i else 1
-        )
+    lock_solved = 0
+    for _ in range(n_plates):
+        lock_solved <<= _PLATE_BITS
+        lock_solved |= _PLATE_SOLVED
 
-        valid_moves: list[tuple[int, int, int]] = []
-        # Ignore centered plates in case if they are not interlocked with other plates at all.
-        _probe_populate_valid_moves(
-            lock, interlocks, n_plates, unprobed, valid_moves, True
-        )
-        if not valid_moves:
-            # Use centered plates too if there are no other options.
-            _probe_populate_valid_moves(
-                lock, interlocks, n_plates, unprobed, valid_moves, False
-            )
-        assert valid_moves, "Logic error: no valid moves during probe"
-
-        # Prefer moves towards the center.
-        valid_moves.sort(
-            key=lambda move: (
-                0
-                if abs(_lock_get(lock, move[1]) - _PLATE_SOLVED)
-                > abs(_lock_get(move[0], move[1]) - _PLATE_SOLVED)
-                else 1
-            )
-        )
-
-        try:
-            for _, plate_i, dir in valid_moves:
-                if dir == 1:
-                    _lock_print(lock, n_plates, {plate_i: "<- move left"})
-                else:
-                    _lock_print(lock, n_plates, {plate_i: "-> move right"})
-
-                try:
-                    lock = _input_probe_result(lock, interlocks, n_plates, plate_i, dir)
-                    unprobed.remove(plate_i)
-                    _interlocks_print(interlocks, n_plates, unprobed)
-                    # State changed => find new valid moves.
-                    break
-                except (_ProbeStuck, _ProbeLockpickBroke) as e:
-                    stuck_plate_pos = _lock_get(lock, e.stuck_plate)
-                    if stuck_plate_pos == _PLATE_MIN:
-                        # Plate tried to move right.
-                        stuck_plate_dir = -1
-                    else:
-                        # Plate tried to move left.
-                        stuck_plate_dir = 1
-                    _interlocks_set(
-                        interlocks,
-                        n_plates,
-                        plate_i,
-                        e.stuck_plate,
-                        stuck_plate_dir * dir,
-                    )
-
-                    if isinstance(e, _ProbeStuck):
-                        # Some plate stuck but picking continues => try next valid move.
-                        continue
-                    else:
-                        raise
-        except _ProbeLockpickBroke:
-            # Some plate stuck and lockpick broke => restart with initial lock state.
-            lock = lock_initial
+    lock, interlocks = _probe_interlocks(lock, lock_solved, n_plates)
 
     print("Current lock state:")
     print()
@@ -189,14 +111,7 @@ def _cmd_unlock():
     print()
 
     for step_i, (lock, plate_i, plate_off) in enumerate(solution):
-        if abs(plate_off) == 1:
-            times = "1 time"
-        else:
-            times = f"{abs(plate_off)} times"
-        if plate_off > 0:
-            _lock_print(lock, n_plates, {plate_i: f"<- move left {times}"})
-        else:
-            _lock_print(lock, n_plates, {plate_i: f"-> move right {times}"})
+        _print_plate_move(lock, n_plates, plate_i, plate_off)
 
         step_i += 1
         if step_i != len(solution):
@@ -206,30 +121,129 @@ def _cmd_unlock():
     print(f"Should be solved after step {len(solution)}/{len(solution)}!")
 
 
-def _probe_populate_valid_moves(
-    lock: int,
+def _probe_interlocks(lock_initial: int, lock_solved: int, n_plates: int) -> tuple[int, list[int]]:
+    lock = lock_initial
+    interlocks = _interlocks_new(n_plates)
+    unprobed = _bits_from_iter(range(n_plates))
+
+    while lock != lock_solved:
+        first_step = _bfs_probe(lock, interlocks, n_plates, unprobed)
+        if first_step is None:
+            break
+
+        plate_i, plate_off = first_step
+        _print_plate_move(lock, n_plates, plate_i, plate_off)
+
+        dir = plate_off // abs(plate_off)
+        try:
+            lock = _input_probe_result(lock, interlocks, n_plates, plate_i, dir)
+            unprobed = _bits_unset(unprobed, plate_i)
+            _interlocks_print(interlocks, n_plates, unprobed)
+        except (_ProbeStuck, _ProbeLockpickBroke) as e:
+            stuck_plate_pos = _lock_get(lock, e.stuck_plate)
+            if stuck_plate_pos == _PLATE_MIN:
+                # Plate tried to move right.
+                stuck_plate_dir = -1
+            else:
+                # Plate tried to move left.
+                stuck_plate_dir = 1
+            _interlocks_set(
+                interlocks,
+                n_plates,
+                plate_i,
+                e.stuck_plate,
+                stuck_plate_dir * dir,
+            )
+
+            if isinstance(e, _ProbeStuck):
+                # Some plate stuck but picking continues => try next valid move.
+                pass
+            else:
+                # Some plate stuck and lockpick broke => restart with initial lock state.
+                lock = lock_initial
+
+    return lock, interlocks
+
+
+def _print_plate_move(lock: int, n_plates: int, plate_i: int, plate_off: int):
+    if abs(plate_off) == 1:
+        times = "1 time"
+    else:
+        times = f"{abs(plate_off)} times"
+    if plate_off > 0:
+        _lock_print(lock, n_plates, {plate_i: f"<- move left {times}"})
+    else:
+        _lock_print(lock, n_plates, {plate_i: f"-> move right {times}"})
+
+
+def _bfs_probe(
+    lock_start: int,
     interlocks: list[int],
     n_plates: int,
-    unprobed: list[int],
-    valid_moves: list[tuple[int, int, int]],
-    skip_centered: bool,
-):
-    for plate_i in unprobed:
-        plate_pos = _lock_get(lock, plate_i)
+    unprobed_start: int,
+) -> tuple[int, int] | None:
+    dist = {(lock_start, unprobed_start): 0}
 
-        if (
-            skip_centered
-            and (plate_pos == _PLATE_SOLVED)
-            and all(
-                _interlocks_get(interlocks, n_plates, other_plate_i, plate_i) == 0
-                for other_plate_i in range(n_plates)
-                if other_plate_i != plate_i
-            )
-        ):
-            # Skip centered plates.
-            continue
+    cur_nodes = [(lock_start, unprobed_start)]
+    next_nodes = []
+    next_dist = 1
+    moves: list[tuple[int, int, int]] = []
 
-        valid_moves.extend(_valid_moves(lock, interlocks, n_plates, plate_i, plate_pos))
+    while cur_nodes:
+        while cur_nodes:
+            cur_node, cur_unprobed = cur_nodes.pop()
+            if (cur_unprobed != unprobed_start) or (cur_unprobed == 0):
+                return _bfs_probe_extract_first_step(
+                    cur_node,
+                    interlocks,
+                    n_plates,
+                    dist,
+                    cur_unprobed,
+                )
+
+            # TODO: Prefer moving edge plates if there is exactly one.
+            # TODO: Prefer moves towards center.
+            # TODO: Prefer small moves.
+            _bfs_populate_moves(cur_node, interlocks, n_plates, moves)
+            while moves:
+                lock, plate_i, _ = moves.pop()
+                unprobed = _bits_unset(cur_unprobed, plate_i)
+                if (lock, unprobed) not in dist:
+                    # Not visited yet.
+                    dist[(lock, unprobed)] = next_dist
+                    next_nodes.append((lock, unprobed))
+
+        cur_nodes, next_nodes = next_nodes, cur_nodes
+        next_dist += 1
+
+    assert False, "Logic error: probe BFS failed"
+
+
+def _bfs_probe_extract_first_step(
+    lock_solved: int,
+    interlocks: list[int],
+    n_plates: int,
+    dist: dict[tuple[int, int], int],
+    unprobed_solved: int,
+) -> tuple[int, int] | None:
+    first_step = None
+    while dist[(lock_solved, unprobed_solved)]:
+        first_step = None
+
+        moves: list[tuple[int, int, int]] = []
+        _bfs_populate_moves(lock_solved, interlocks, n_plates, moves)
+        for lock, plate_i, plate_off in moves:
+            plate_off = -plate_off
+            unprobed = _bits_set(unprobed_solved, plate_i)
+
+            if dist.get((lock, unprobed)) == dist[(lock_solved, unprobed_solved)] - 1:
+                first_step = plate_i, plate_off
+
+                lock_solved = lock
+                unprobed_solved = unprobed
+                break
+        assert first_step, "Logic error: unable to extract first step"
+    return first_step
 
 
 def _input_probe_result(
@@ -406,29 +420,20 @@ def _bfs_populate_moves(
                 moves.append((next_lock, plate_i, plate_off))
 
 
-def _valid_moves(
-    lock: int, interlocks: list[int], n_plates: int, plate_i: int, plate_pos: int
-) -> Iterable[tuple[int, int, int]]:
-    if plate_pos == _PLATE_MIN:
-        dirs = (1,)
-    elif plate_pos == _PLATE_MAX:
-        dirs = (-1,)
-    else:
-        dirs = (1, -1)
+def _bits_from_iter(bits: Iterable[int]) -> int:
+    return sum(0b1 << pos for pos in bits)
 
-    for dir in dirs:
-        next_lock_state = _lock_from_iter(
-            (
-                affected_pos + dir * effect_dir
-                for affected_pos, effect_dir in zip(
-                    _lock_plates(lock, n_plates),
-                    _interlocks_iter_cols(interlocks, n_plates, plate_i),
-                )
-            )
-        )
-        if next_lock_state is None:
-            continue
-        yield next_lock_state, plate_i, dir
+
+def _bits_get(bits: int, bit_pos: int) -> int:
+    return (bits >> bit_pos) & 0b1
+
+
+def _bits_set(bits: int, set_bit_pos: int) -> int:
+    return bits | (0b1 << set_bit_pos)
+
+
+def _bits_unset(bits: int, unset_bit_pos: int) -> int:
+    return bits & ~(0b1 << unset_bit_pos)
 
 
 def _lock_print(state: int, n_plates: int, annotations: dict[int, str] | None = None):
@@ -467,26 +472,9 @@ def _lock_get(state: int, plate_i: int) -> int:
     return (state >> (plate_i * _PLATE_BITS)) & _PLATE_MASK
 
 
-def _lock_plates(state: int, n_plates: int) -> list[int]:
-    plates = [0] * n_plates
-    for plate_i in range(n_plates):
-        plates[plate_i] = state & _PLATE_MASK
-        state >>= _PLATE_BITS
-    return plates
-
-
 def _lock_set(state: int, plate_i: int, plate_pos: int) -> int:
     shift = plate_i * _PLATE_BITS
     return state & (~(_PLATE_MASK << shift)) | (plate_pos << shift)
-
-
-def _lock_from_iter(plates: Iterable[int]) -> int | None:
-    state = 0
-    for plate_i, plate_pos in enumerate(plates):
-        if (plate_pos < _PLATE_MIN) or (plate_pos > _PLATE_MAX):
-            return None
-        state |= plate_pos << (plate_i * _PLATE_BITS)
-    return state
 
 
 def _interlocks_new(n_plates: int) -> list[int]:
@@ -496,12 +484,12 @@ def _interlocks_new(n_plates: int) -> list[int]:
     return matrix
 
 
-def _interlocks_print(matrix: list[int], n_plates: int, unprobed: list[int]):
+def _interlocks_print(matrix: list[int], n_plates: int, unprobed: int):
     plate_i = 0
     lines: list[str] = []
     line = ""
     for i, elem in enumerate(matrix):
-        if (elem == 0) and (plate_i in unprobed):
+        if (elem == 0) and _bits_get(unprobed, plate_i):
             line += " ? "
         else:
             line += (" . ", " > ", " < ")[elem]
@@ -521,18 +509,6 @@ def _interlocks_print(matrix: list[int], n_plates: int, unprobed: list[int]):
     print("      \\   " + "   " * n_plates + "affected")
     print("       moved by player")
     print()
-
-
-def _interlocks_get(matrix: list[int], n_plates: int, row_i: int, col_i: int) -> int:
-    return matrix[row_i * n_plates + col_i]
-
-
-def _interlocks_iter_cols(
-    matrix: list[int], n_plates: int, row_i: int
-) -> Iterable[int]:
-    start = row_i * n_plates
-    for i in range(start, start + n_plates):
-        yield matrix[i]
 
 
 def _interlocks_set(
