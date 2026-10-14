@@ -156,6 +156,30 @@ p 1 > < < . .
 EOF
 echo
 
+echo "New Camp, Tavern second floor door"
+${CMD} <<EOF
+u
+7 3 1 1 1
+> > < . .
+s 4 5
+. . < . .
+b 5
+s 3
+b 1
+
+. . > . <
+. . < < >
+
+s 3
+
+> < > > >
+
+
+
+
+EOF
+echo
+
 echo "!!!! Old Camp, Raven Chest"
 ${CMD} <<EOF
 u

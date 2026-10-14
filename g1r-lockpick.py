@@ -163,24 +163,25 @@ def _probe_interlocks(
             )
             _interlocks_print(interlocks, n_plates, unprobed)
         except (_ProbeStuck, _ProbeLockpickBroke) as e:
-            stuck_plate_pos = _lock_get(lock, e.stuck_plate)
-            if stuck_plate_pos == _PLATE_MIN:
-                # Plate tried to move right.
-                stuck_plate_dir = -1
-            elif stuck_plate_pos == _PLATE_MAX:
-                # Plate tried to move left.
-                stuck_plate_dir = 1
-            else:
-                raise _Err(
-                    f"Plate #{e.stuck_plate + 1} cannot be stuck: pin is not in edge position"
+            for stuck_plate in e.stuck_plates:
+                stuck_plate_pos = _lock_get(lock, stuck_plate)
+                if stuck_plate_pos == _PLATE_MIN:
+                    # Plate tried to move right.
+                    stuck_plate_dir = -1
+                elif stuck_plate_pos == _PLATE_MAX:
+                    # Plate tried to move left.
+                    stuck_plate_dir = 1
+                else:
+                    raise _Err(
+                        f"Plate #{stuck_plate + 1} cannot be stuck: pin is not in edge position"
+                    )
+                _interlocks_set(
+                    interlocks,
+                    n_plates,
+                    plate_i,
+                    stuck_plate,
+                    stuck_plate_dir * dir,
                 )
-            _interlocks_set(
-                interlocks,
-                n_plates,
-                plate_i,
-                e.stuck_plate,
-                stuck_plate_dir * dir,
-            )
 
             if isinstance(e, _ProbeStuck):
                 # Some plate stuck but picking continues => try next valid move.
@@ -322,8 +323,8 @@ def _input_probe_result(
     print(
         f"or `p <PLATE [1..{n_plates}]> [<, ., >] [<, ., >] ...` to set connections manually"
     )
-    print(f"or `s <STUCK PLATE [1..{n_plates}]>` if stuck")
-    print(f"or `b <STUCK PLATE [1..{n_plates}]>` if lockpick broke")
+    print(f"or `s <STUCK PLATE [1..{n_plates}]> ...` if stuck")
+    print(f"or `b <STUCK PLATE [1..{n_plates}]> ...` if lockpick broke")
     shifts = _input("u> ")
     shifts = shifts.strip().lower().split()
     if not shifts:
@@ -342,18 +343,24 @@ def _input_probe_result(
 
         return lock, _bits_unset(unprobed, set_plate)
 
-    if (len(shifts) == 2) and (shifts[0] in ("s", "b")):
-        stuck_plate = int(shifts[1])
-        if stuck_plate < 1:
-            raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} < 1")
-        if stuck_plate > n_plates:
-            raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} > {n_plates}")
-        stuck_plate -= 1
+    if (len(shifts) > 1) and (shifts[0] in ("s", "b")):
+        stuck_plates: list[int] = []
+        for stuck_plate in shifts[1:]:
+            stuck_plate = int(stuck_plate)
+            if stuck_plate < 1:
+                raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} < 1")
+            if stuck_plate > n_plates:
+                raise _Err(
+                    f"Index of stuck plate is wrong: got {stuck_plate} > {n_plates}"
+                )
+            stuck_plate -= 1
+
+            stuck_plates.append(stuck_plate)
 
         if shifts[0] == "s":
-            raise _ProbeStuck(stuck_plate)
+            raise _ProbeStuck(stuck_plates)
         if shifts[0] == "b":
-            raise _ProbeLockpickBroke(stuck_plate)
+            raise _ProbeLockpickBroke(stuck_plates)
 
     if len(shifts) != n_plates:
         raise _Err("Wrong number of plates")
@@ -400,16 +407,16 @@ def _parse_shifts(shifts: list[str], n_plates: int) -> Iterable[tuple[int, int]]
 
 @final
 class _ProbeStuck(Exception):
-    def __init__(self, stuck_plate: int):
+    def __init__(self, stuck_plates: list[int]):
         super().__init__("Probe stuck")
-        self.stuck_plate = stuck_plate
+        self.stuck_plates = stuck_plates
 
 
 @final
 class _ProbeLockpickBroke(Exception):
-    def __init__(self, stuck_plate: int):
+    def __init__(self, stuck_plates: list[int]):
         super().__init__("Probe lockpick broke")
-        self.stuck_plate = stuck_plate
+        self.stuck_plates = stuck_plates
 
 
 def _bfs(
