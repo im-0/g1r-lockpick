@@ -161,7 +161,6 @@ def _probe_interlocks(
             lock, unprobed = _input_probe_result(
                 lock, unprobed, interlocks, n_plates, plate_i, dir
             )
-            _interlocks_print(interlocks, n_plates, unprobed)
         except (_ProbeStuck, _ProbeLockpickBroke) as e:
             for stuck_plate in e.stuck_plates:
                 stuck_plate_pos = _lock_get(lock, stuck_plate)
@@ -189,6 +188,7 @@ def _probe_interlocks(
             else:
                 # Some plate stuck and lockpick broke => restart with initial lock state.
                 lock = lock_initial
+        _interlocks_print(interlocks, n_plates, unprobed)
 
     return lock, interlocks
 
