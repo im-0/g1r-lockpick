@@ -136,6 +136,26 @@ s 3
 EOF
 echo
 
+echo "New Camp, Tavern underwater chest #1"
+${CMD} <<EOF
+u
+4 3 7 2 5
+p 5 . . < . >
+p 4 < . . > >
+p 3 < > > > .
+p 2 > > . < .
+p 1 > < < . .
+
+
+
+
+
+
+
+
+EOF
+echo
+
 echo "!!!! Old Camp, Raven Chest"
 ${CMD} <<EOF
 u

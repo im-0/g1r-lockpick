@@ -158,8 +158,9 @@ def _probe_interlocks(
         _print_plate_move(lock, n_plates, plate_i, dir)
 
         try:
-            lock = _input_probe_result(lock, interlocks, n_plates, plate_i, dir)
-            unprobed = _bits_unset(unprobed, plate_i)
+            lock, unprobed = _input_probe_result(
+                lock, unprobed, interlocks, n_plates, plate_i, dir
+            )
             _interlocks_print(interlocks, n_plates, unprobed)
         except (_ProbeStuck, _ProbeLockpickBroke) as e:
             stuck_plate_pos = _lock_get(lock, e.stuck_plate)
@@ -307,10 +308,18 @@ def _bfs_probe_populate_moves(
 
 
 def _input_probe_result(
-    lock: int, interlocks: list[int], n_plates: int, plate_i: int, dir: int
-) -> int:
+    lock: int,
+    unprobed: int,
+    interlocks: list[int],
+    n_plates: int,
+    plate_i: int,
+    dir: int,
+) -> tuple[int, int]:
     print(
         "and enter the space separated plate shifts [<, ., >] from bottom left to top right"
+    )
+    print(
+        f"or `p <PLATE [1..{n_plates}]> [<, ., >] [<, ., >] ...` to set connections manually"
     )
     print(f"or `s <STUCK PLATE [1..{n_plates}]>` if stuck")
     print(f"or `b <STUCK PLATE [1..{n_plates}]>` if lockpick broke")
@@ -318,6 +327,19 @@ def _input_probe_result(
     shifts = shifts.strip().lower().split()
     if not shifts:
         raise _Err("No lock plate shifts")
+
+    if (len(shifts) > 2) and (shifts[0] == "p"):
+        set_plate = int(shifts[1])
+        if (set_plate < 1) or (set_plate > n_plates):
+            raise _Err(
+                f"Wrong number of plate to set: got {set_plate}, must be [1..{n_plates}]"
+            )
+        set_plate -= 1
+
+        for shift_i, shift_dir in _parse_shifts(shifts[2:], n_plates):
+            _interlocks_set(interlocks, n_plates, set_plate, shift_i, -shift_dir)
+
+        return lock, _bits_unset(unprobed, set_plate)
 
     if (len(shifts) == 2) and (shifts[0] in ("s", "b")):
         stuck_plate = int(shifts[1])
@@ -335,16 +357,7 @@ def _input_probe_result(
     if len(shifts) != n_plates:
         raise _Err("Wrong number of plates")
 
-    for shift_i, shift in enumerate(shifts):
-        if shift == "<":
-            shift_dir = 1
-        elif shift == ".":
-            shift_dir = 0
-        elif shift == ">":
-            shift_dir = -1
-        else:
-            raise _Err(f'Unknown change direction of plate #{shift_i + 1}: "{shift}"')
-
+    for shift_i, shift_dir in _parse_shifts(shifts, n_plates):
         if shift_i == plate_i:
             if shift_dir != dir:
                 raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
@@ -364,7 +377,24 @@ def _input_probe_result(
             )
         lock = _lock_set(lock, shift_i, plate_pos)
 
-    return lock
+    return lock, _bits_unset(unprobed, plate_i)
+
+
+def _parse_shifts(shifts: list[str], n_plates: int) -> Iterable[tuple[int, int]]:
+    if len(shifts) != n_plates:
+        raise _Err(f"Wrong number of plates: got {len(shifts)}, expected {n_plates}")
+
+    for shift_i, shift in enumerate(shifts):
+        if shift == "<":
+            shift_dir = 1
+        elif shift == ".":
+            shift_dir = 0
+        elif shift == ">":
+            shift_dir = -1
+        else:
+            raise _Err(f'Unknown change direction of plate #{shift_i + 1}: "{shift}"')
+
+        yield shift_i, shift_dir
 
 
 @final
