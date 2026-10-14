@@ -1,0 +1,43 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: ${{ matrix.name }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: Tests
+            package: ""
+            command: ./g1r-lockpick-tests.sh
+
+          - name: Ruff
+            package: ruff
+            command: ruff check g1r-lockpick.py
+
+          - name: Pyright
+            package: pyright
+            command: pyright g1r-lockpick.py
+
+    env:
+      PY3_IMPL: python
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "pypy3.12"
+
+      - name: Install checker
+        if: matrix.package != ''
+        run: python -m pip install "${{ matrix.package }}"
+
+      - name: Run check
+        run: ${{ matrix.command }}
