@@ -129,11 +129,20 @@ def _probe_interlocks(
     unprobed = _bits_from_iter(range(n_plates))
 
     while lock != lock_solved:
-        first_step = _bfs_probe(lock, interlocks, n_plates, unprobed)
-        if first_step is None:
+        solution = _bfs_probe(lock, interlocks, n_plates, unprobed)
+        if not solution:
             break
 
-        plate_i, plate_off = first_step
+        for step_i, (lock, plate_i, plate_off) in enumerate(solution[:-1]):
+            _print_plate_move(lock, n_plates, plate_i, plate_off)
+
+            step_i += 1
+            print(
+                f"Press Enter after applying correcting step {step_i}/{len(solution) - 1}"
+            )
+            _ = _input("s> ")
+
+        lock, plate_i, plate_off = solution[-1]
         _print_plate_move(lock, n_plates, plate_i, plate_off)
 
         dir = plate_off // abs(plate_off)
@@ -183,7 +192,7 @@ def _bfs_probe(
     interlocks: list[int],
     n_plates: int,
     unprobed_start: int,
-) -> tuple[int, int] | None:
+) -> list[tuple[int, int, int]]:
     dist = {(lock_start, unprobed_start): 0}
 
     cur_nodes = [(lock_start, unprobed_start)]
@@ -195,7 +204,7 @@ def _bfs_probe(
         while cur_nodes:
             cur_node, cur_unprobed = cur_nodes.pop()
             if (cur_unprobed != unprobed_start) or (cur_unprobed == 0):
-                return _bfs_probe_extract_first_step(
+                return _bfs_probe_extract_solution(
                     cur_node,
                     interlocks,
                     n_plates,
@@ -246,16 +255,16 @@ def _bfs_probe_populate_moves(
         moves.sort(key=lambda m: 0 if m[1] == edge_plate_i else 1)
 
 
-def _bfs_probe_extract_first_step(
+def _bfs_probe_extract_solution(
     lock_solved: int,
     interlocks: list[int],
     n_plates: int,
     dist: dict[tuple[int, int], int],
     unprobed_solved: int,
-) -> tuple[int, int] | None:
-    first_step = None
+) -> list[tuple[int, int, int]]:
+    solution: list[tuple[int, int, int]] = []
     while dist[(lock_solved, unprobed_solved)]:
-        first_step = None
+        found_step = False
 
         moves: list[tuple[int, int, int]] = []
         _bfs_populate_moves(lock_solved, interlocks, n_plates, moves)
@@ -267,12 +276,14 @@ def _bfs_probe_extract_first_step(
                     dist.get((lock, unprobed))
                     == dist[(lock_solved, unprobed_solved)] - 1
                 ):
-                    first_step = plate_i, plate_off
+                    solution.append((lock, plate_i, plate_off))
 
+                    found_step = True
                     lock_solved = lock
                     unprobed_solved = unprobed
-        assert first_step, "Logic error: unable to extract first step"
-    return first_step
+        assert found_step, "Logic error: unable to extract probe solution"
+    solution.reverse()
+    return solution
 
 
 def _input_probe_result(
