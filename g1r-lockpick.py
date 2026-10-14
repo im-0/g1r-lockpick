@@ -254,7 +254,11 @@ def _bfs_probe_extract_solution(
                     lock_solved = lock
                     unprobed_solved = unprobed
                     break
+
+            if found_step:
+                break
         assert found_step, "Logic error: unable to extract probe solution"
+
     solution.reverse()
     return solution
 
