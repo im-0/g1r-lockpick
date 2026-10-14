@@ -315,6 +315,7 @@ def _input_probe_result(
     plate_i: int,
     dir: int,
 ) -> tuple[int, int]:
+    # TODO: Multiple plates can stuck simultaneously.
     print(
         "and enter the space separated plate shifts [<, ., >] from bottom left to top right"
     )
