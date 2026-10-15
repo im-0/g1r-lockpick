@@ -568,11 +568,13 @@ def _lock_print(state: int, n_plates: int, annotations: dict[int, str] | None = 
         print(
             f"    {plate_i + 1}: "
             + ("  " * (_PLATE_MAX - plate_off - 1))
-            + f"[ {plate} ]",
+            + f"[ {plate} ]"
+            + ("  " * plate_off)
+            + f" :{plate_i + 1}",
             end=end,
         )
         if annotation is not None:
-            print(("  " * plate_off) + f" {annotation}")
+            print(f" {annotation}")
 
     # Print lockpick
     for _ in range(2):
