@@ -22,43 +22,39 @@ echo
 
 echo "!!!! Synthetic, Solved 1 plate"
 ${CMD} <<EOF
-u
 4
 EOF
 echo
 
 echo "!!!! Synthetic, Solved 7 plates"
 ${CMD} <<EOF
-u
-4 4 4 4 4 4 4
+4444444
 EOF
 echo
 
 echo "!!!! Synthetic, Required connections on centered plates"
 ${CMD} <<'EOF'
-u
-1 3 4 4
-< < . .
-> > . .
-s 1
-< > < <
-. . > >
+1344
+<<..
+>>..
+s1
+<><<
+..>>
+
 EOF
 echo
 
 echo "!!!! Synthetic, Solved by probe moving left"
 ${CMD} <<EOF
-u
-4 3
-. <
+43
+.<
 EOF
 echo
 
 echo "!!!! Synthetic, Solved by probe moving right"
 ${CMD} <<EOF
-u
-4 5
-. >
+45
+.>
 EOF
 echo
 
@@ -68,17 +64,17 @@ echo
 
 echo "!!!! New Camp, Cave Tavern Door Lock 02"
 ${CMD} <<EOF
-u
-5 5 6 2 7 7
-> . . . . .
-s 6
-b 6
-< . > < . .
-s 6
-. . < . . >
-< . . . > <
-. < < . . >
-. < > . > <
+556277
+>.....
+s6
+b6
+<.><..
+s6
+..<..>
+<...><
+.<<..>
+.<>.><
+
 
 
 
@@ -93,16 +89,16 @@ echo
 
 echo "!!!! New Camp, Gorn Chest"
 ${CMD} <<EOF
-u
-4 5 7 6 6 1
-s 6
-. . > < < .
-. . . > . .
-s 6
-> . . . . <
-. . < > > >
-< . . . > .
-. < . > > <
+457661
+s6
+..><<.
+...>..
+s6
+>....<
+..<>>>
+<...>.
+.<.>><
+
 
 
 
@@ -114,17 +110,17 @@ echo
 
 echo "!!!! Old Camp, Skip Chest"
 ${CMD} <<EOF
-u
-1 4 1 6 4 1
-s 3
-. . < . > .
-< > > . . .
-. < . . . .
-s 3
-. . . < < .
-. > . . . <
+141641
+s3
+..<.>.
+<>>...
+.<....
+s3
+...<<.
+.>...<
 
-. . < < < <
+..<<<<
+
 
 
 
@@ -138,13 +134,13 @@ echo
 
 echo "New Camp, Tavern underwater chest #1"
 ${CMD} <<EOF
-u
-4 3 7 2 5
-p 5 . . < . >
-p 4 < . . > >
-p 3 < > > > .
-p 2 > > . < .
-p 1 > < < . .
+43725
+p5..<.>
+p4<..>>
+p3<>>>.
+p2>>.<.
+p1><<..
+
 
 
 
@@ -158,21 +154,21 @@ echo
 
 echo "New Camp, Tavern second floor door"
 ${CMD} <<EOF
-u
-7 3 1 1 1
-> > < . .
-s 4 5
-. . < . .
-b 5
-s 3
-b 1
+73111
+>><..
+s45
+..<..
+b5
+s3
+b1
 
-. . > . <
-. . < < >
+..>.<
+..<<>
 
-s 3
+s3
 
-> < > > >
+><>>>
+
 
 
 
@@ -182,20 +178,20 @@ echo
 
 echo "!!!! Old Camp, Raven Chest"
 ${CMD} <<EOF
-u
-7 6 4 7 2 7 5
-s 4
-. > . . . . .
-. . . > . . .
-s 6
-s 1
-. . . < > > .
-. . . . . . >
-> . > . . . .
-s 4
-< . . > . > .
+7647275
+s4
+.>.....
+...>...
+s6
+s1
+...<>>.
+......>
+>.>....
+s4
+<..>.>.
 
-> . < > > > <
+>.<>>><
+
 
 
 

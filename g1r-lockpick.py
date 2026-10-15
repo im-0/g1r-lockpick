@@ -2,12 +2,12 @@
 
 import atexit
 import readline
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from os import path
 from pathlib import Path
 from sys import exit, stderr, stdin, stdout
 from time import monotonic_ns
-from typing import final
+from typing import TypeVar, final
 
 _READLINE_HISTORY_FILE = path.join(Path.home(), ".g1r-lockpick.history")
 _READLINE_HISTORY_LEN = 1000
@@ -28,35 +28,24 @@ _U32_MAX = (0b1 << 32) - 1
 def _main():
     _init_readline()
 
-    print("`h` for help")
     last_ret_code = 0
     try:
         while True:
-            cmd = _input(" > ")
-            cmd = cmd.strip().lower()
-            if not cmd:
-                continue
+            lock, n_plates = _input(
+                (
+                    f"Enter pin positions [{_PLATE_MIN}..{_PLATE_MAX}] from bottom left to top right",
+                ),
+                _parse_lock_plates,
+            )
 
-            if cmd == "h":
-                print("Supported commands:")
-                print("    h - print this help message")
-                print("    q - quit")
-                print("    u - start unlocking a new lock")
-            elif cmd == "q":
-                break
-            elif cmd == "u":
-                try:
-                    last_ret_code = 1
-                    _cmd_unlock()
-                    last_ret_code = 0
-                    print()
-                except (_Err, ValueError) as e:
-                    print(f"ERROR: {e}")
-                    print()
-                except (EOFError, KeyboardInterrupt):
-                    print()
-            else:
-                print(f'Unknown command "{cmd}", enter `h` for help')
+            last_ret_code = 1
+            try:
+                _unlock(lock, n_plates)
+                last_ret_code = 0
+            except EOFError:
+                print()
+
+            print()
     except (EOFError, KeyboardInterrupt):
         print()
     exit(last_ret_code)
@@ -78,12 +67,7 @@ def _init_readline():
         print(f"readline initialization failed: {e}", file=stderr)
 
 
-def _cmd_unlock():
-    print(
-        "Enter the space separated pin positions [1..7] from bottom left to top right"
-    )
-    plates = _input("u> ")
-    plates = plates.split()
+def _parse_lock_plates(plates: str) -> tuple[int, int]:
     n_plates = len(plates)
     if n_plates == 0:
         raise _Err("No lock plates")
@@ -104,32 +88,62 @@ def _cmd_unlock():
 
         lock = _lock_set(lock, plate_i, plate_pos)
 
+    return lock, n_plates
+
+
+def _unlock(lock_initial: int, n_plates: int):
     lock_solved = 0
     for _ in range(n_plates):
         lock_solved <<= _PLATE_BITS
         lock_solved |= _PLATE_SOLVED
 
-    lock, interlocks = _probe_interlocks(lock, lock_solved, n_plates)
+    lock, interlocks = _probe_interlocks(lock_initial, lock_solved, n_plates)
 
-    print("Current lock state:")
-    print()
-    _lock_print(lock, n_plates)
-    print("Solving...")
-    time_passed = monotonic_ns()
-    solution = _bfs(lock, lock_solved, interlocks, n_plates)
-    time_passed = monotonic_ns() - time_passed
-    print(f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)")
-    print()
+    restart = True
+    solution = None
+    while restart:
+        print("Current lock state:")
+        print()
+        _lock_print(lock, n_plates)
 
-    for step_i, (lock, plate_i, plate_off) in enumerate(solution):
-        _print_plate_move(lock, n_plates, plate_i, plate_off)
+        if solution is None:
+            print("Solving...")
+            time_passed = monotonic_ns()
+            solution = _bfs(lock, lock_solved, interlocks, n_plates)
+            time_passed = monotonic_ns() - time_passed
+            print(f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)")
+            print()
 
-        step_i += 1
-        if step_i != len(solution):
-            print(f"Press Enter after applying step {step_i}/{len(solution)}")
-            _ = _input("s> ")
+        restart = False
+        for step_i, (lock, plate_i, plate_off) in enumerate(solution):
+            _print_plate_move(lock, n_plates, plate_i, plate_off)
 
-    print(f"Should be solved after step {len(solution)}/{len(solution)}!")
+            step_i += 1
+            restart = _input(
+                (
+                    f"Press Enter after applying step {step_i}/{len(solution)}",
+                    "or write `r` to restart from the initial state",
+                ),
+                _unlock_parse_cmd,
+            )
+            if restart:
+                if lock != lock_initial:
+                    lock = lock_initial
+                    solution = None
+                break
+
+    if solution == []:
+        print("Already solved!")
+    elif solution is not None:
+        print(f"Should be solved after {len(solution)} steps!")
+
+
+def _unlock_parse_cmd(cmd: str) -> bool:
+    if cmd == "r":
+        return True
+    if cmd == "":
+        return False
+    raise _Err(f'Unknown command: "{cmd}"')
 
 
 def _probe_interlocks(
@@ -148,32 +162,32 @@ def _probe_interlocks(
             _print_plate_move(lock, n_plates, plate_i, plate_off)
 
             step_i += 1
-            print(
-                f"Press Enter after applying correcting step {step_i}/{len(solution) - 1}"
+            _ = _input(
+                (
+                    f"Press Enter after applying correcting step {step_i}/{len(solution) - 1}",
+                ),
             )
-            _ = _input("s> ")
 
         lock, plate_i, plate_off = solution[-1]
         dir = plate_off // abs(plate_off)
         _print_plate_move(lock, n_plates, plate_i, dir)
 
         try:
-            lock, unprobed = _input_probe_result(
-                lock, unprobed, interlocks, n_plates, plate_i, dir
+            lock, unprobed = _input(
+                (
+                    "Enter plate shifts [<, ., >] from bottom left to top right",
+                    f"or `p <PLATE [1..{n_plates}]> [<, ., >] ...` to set connections manually",
+                    f"or `s <STUCK PLATE [1..{n_plates}]> ...` if stuck",
+                    f"or `b <STUCK PLATE [1..{n_plates}]> ...` if lockpick broke",
+                ),
+                lambda cmd, lock=lock, unprobed=unprobed, plate_i=plate_i, dir=dir: (
+                    _probe_interlocks_parse_cmd(
+                        cmd, lock, unprobed, interlocks, n_plates, plate_i, dir
+                    )
+                ),
             )
         except (_ProbeStuck, _ProbeLockpickBroke) as e:
-            for stuck_plate in e.stuck_plates:
-                stuck_plate_pos = _lock_get(lock, stuck_plate)
-                if stuck_plate_pos == _PLATE_MIN:
-                    # Plate tried to move right.
-                    stuck_plate_dir = -1
-                elif stuck_plate_pos == _PLATE_MAX:
-                    # Plate tried to move left.
-                    stuck_plate_dir = 1
-                else:
-                    raise _Err(
-                        f"Plate #{stuck_plate + 1} cannot be stuck: pin is not in edge position"
-                    )
+            for stuck_plate, stuck_plate_dir in e.stuck_plates:
                 _interlocks_set(
                     interlocks,
                     n_plates,
@@ -308,7 +322,8 @@ def _bfs_probe_populate_moves(
         moves.sort(key=lambda m: 0 if m[1] == edge_plate_i else 1)
 
 
-def _input_probe_result(
+def _probe_interlocks_parse_cmd(
+    cmd: str,
     lock: int,
     unprobed: int,
     interlocks: list[int],
@@ -316,36 +331,22 @@ def _input_probe_result(
     plate_i: int,
     dir: int,
 ) -> tuple[int, int]:
-    # TODO: Multiple plates can stuck simultaneously.
-    print(
-        "and enter the space separated plate shifts [<, ., >] from bottom left to top right"
-    )
-    print(
-        f"or `p <PLATE [1..{n_plates}]> [<, ., >] [<, ., >] ...` to set connections manually"
-    )
-    print(f"or `s <STUCK PLATE [1..{n_plates}]> ...` if stuck")
-    print(f"or `b <STUCK PLATE [1..{n_plates}]> ...` if lockpick broke")
-    shifts = _input("u> ")
-    shifts = shifts.strip().lower().split()
-    if not shifts:
-        raise _Err("No lock plate shifts")
-
-    if (len(shifts) > 2) and (shifts[0] == "p"):
-        set_plate = int(shifts[1])
+    if (len(cmd) > 2) and (cmd[0] == "p"):
+        set_plate = int(cmd[1])
         if (set_plate < 1) or (set_plate > n_plates):
             raise _Err(
                 f"Wrong number of plate to set: got {set_plate}, must be [1..{n_plates}]"
             )
         set_plate -= 1
 
-        for shift_i, shift_dir in _parse_shifts(shifts[2:], n_plates):
+        for shift_i, shift_dir in _probe_interlocks_parse_shifts(cmd[2:], n_plates):
             _interlocks_set(interlocks, n_plates, set_plate, shift_i, -shift_dir)
 
         return lock, _bits_unset(unprobed, set_plate)
 
-    if (len(shifts) > 1) and (shifts[0] in ("s", "b")):
-        stuck_plates: list[int] = []
-        for stuck_plate in shifts[1:]:
+    if (len(cmd) > 1) and (cmd[0] in ("s", "b")):
+        stuck_plates: list[tuple[int, int]] = []
+        for stuck_plate in cmd[1:]:
             stuck_plate = int(stuck_plate)
             if stuck_plate < 1:
                 raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} < 1")
@@ -355,17 +356,29 @@ def _input_probe_result(
                 )
             stuck_plate -= 1
 
-            stuck_plates.append(stuck_plate)
+            stuck_plate_pos = _lock_get(lock, stuck_plate)
+            if stuck_plate_pos == _PLATE_MIN:
+                # Plate tried to move right.
+                stuck_plate_dir = -1
+            elif stuck_plate_pos == _PLATE_MAX:
+                # Plate tried to move left.
+                stuck_plate_dir = 1
+            else:
+                raise _Err(
+                    f"Plate #{stuck_plate + 1} cannot be stuck: pin is not in edge position"
+                )
 
-        if shifts[0] == "s":
+            stuck_plates.append((stuck_plate, stuck_plate_dir))
+
+        if cmd[0] == "s":
             raise _ProbeStuck(stuck_plates)
-        if shifts[0] == "b":
+        if cmd[0] == "b":
             raise _ProbeLockpickBroke(stuck_plates)
 
-    if len(shifts) != n_plates:
+    if len(cmd) != n_plates:
         raise _Err("Wrong number of plates")
 
-    for shift_i, shift_dir in _parse_shifts(shifts, n_plates):
+    for shift_i, shift_dir in _probe_interlocks_parse_shifts(cmd, n_plates):
         if shift_i == plate_i:
             if shift_dir != dir:
                 raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
@@ -388,7 +401,9 @@ def _input_probe_result(
     return lock, _bits_unset(unprobed, plate_i)
 
 
-def _parse_shifts(shifts: list[str], n_plates: int) -> Iterable[tuple[int, int]]:
+def _probe_interlocks_parse_shifts(
+    shifts: str, n_plates: int
+) -> Iterable[tuple[int, int]]:
     if len(shifts) != n_plates:
         raise _Err(f"Wrong number of plates: got {len(shifts)}, expected {n_plates}")
 
@@ -407,14 +422,14 @@ def _parse_shifts(shifts: list[str], n_plates: int) -> Iterable[tuple[int, int]]
 
 @final
 class _ProbeStuck(Exception):
-    def __init__(self, stuck_plates: list[int]):
+    def __init__(self, stuck_plates: list[tuple[int, int]]):
         super().__init__("Probe stuck")
         self.stuck_plates = stuck_plates
 
 
 @final
 class _ProbeLockpickBroke(Exception):
-    def __init__(self, stuck_plates: list[int]):
+    def __init__(self, stuck_plates: list[tuple[int, int]]):
         super().__init__("Probe lockpick broke")
         self.stuck_plates = stuck_plates
 
@@ -620,12 +635,26 @@ class _Err(Exception):
     pass
 
 
-def _input(prompt: str) -> str:
-    result = input(prompt)
-    if not stdin.isatty():
-        print(result)
-    print()
-    return result
+_R = TypeVar("_R")
+
+
+def _input(prompt: Iterable[str], parser: Callable[[str], _R] = lambda _: None) -> _R:
+    while True:
+        try:
+            for prompt_line in prompt:
+                print(prompt_line)
+
+            command = input(" > ")
+            if not stdin.isatty():
+                print(command)
+            print()
+
+            command = "".join(command.split()).lower()
+
+            return parser(command)
+        except (_Err, ValueError) as e:
+            print(f"ERROR: {e}")
+            print()
 
 
 _main()
