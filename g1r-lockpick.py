@@ -172,37 +172,27 @@ def _probe_interlocks(
         dir = plate_off // abs(plate_off)
         _print_plate_move(lock, n_plates, plate_i, dir)
 
-        try:
-            lock, unprobed = _input(
-                (
-                    "Enter plate shifts [<, ., >] from bottom left to top right",
-                    f"or `p <PLATE [1..{n_plates}]> [<, ., >] ...` to set connections manually",
-                    f"or `s <STUCK PLATE [1..{n_plates}]> ...` if stuck",
-                    f"or `b <STUCK PLATE [1..{n_plates}]> ...` if lockpick broke",
-                ),
-                lambda cmd, lock=lock, unprobed=unprobed, plate_i=plate_i, dir=dir: (
-                    _probe_interlocks_parse_cmd(
-                        cmd, lock, unprobed, interlocks, n_plates, plate_i, dir
-                    )
-                ),
-            )
-        except (_ProbeStuck, _ProbeLockpickBroke) as e:
-            for stuck_plate, stuck_plate_dir in e.stuck_plates:
-                _interlocks_set(
+        lock, unprobed = _input(
+            (
+                "Write plate shifts [<, ., >] from bottom left to top right",
+                f"or `p <PLATE [1..{n_plates}]> [<, ., >] ...` to set connections manually",
+                f"or `s <STUCK PLATE [1..{n_plates}]> ...` if stuck",
+                f"or `b <STUCK PLATE [1..{n_plates}]> ...` if lockpick broke",
+                "or `r` to continue from the initial state",
+            ),
+            lambda cmd, lock=lock, lock_initial=lock_initial, unprobed=unprobed, plate_i=plate_i, dir=dir: (
+                _probe_interlocks_parse_cmd(
+                    cmd,
+                    lock,
+                    lock_initial,
+                    unprobed,
                     interlocks,
                     n_plates,
                     plate_i,
-                    stuck_plate,
-                    stuck_plate_dir * dir,
+                    dir,
                 )
-
-            if isinstance(e, _ProbeStuck):
-                # Some plate stuck but picking continues => try next valid move.
-                pass
-            else:
-                # Some plate stuck and lockpick broke => restart with initial lock state.
-                lock = lock_initial
-        _interlocks_print(interlocks, n_plates, unprobed)
+            ),
+        )
 
     return lock, interlocks
 
@@ -325,12 +315,16 @@ def _bfs_probe_populate_moves(
 def _probe_interlocks_parse_cmd(
     cmd: str,
     lock: int,
+    lock_initial: int,
     unprobed: int,
     interlocks: list[int],
     n_plates: int,
     plate_i: int,
     dir: int,
 ) -> tuple[int, int]:
+    if cmd == "r":
+        return lock_initial, unprobed
+
     if (len(cmd) > 2) and (cmd[0] == "p"):
         set_plate = int(cmd[1])
         if (set_plate < 1) or (set_plate > n_plates):
@@ -342,10 +336,10 @@ def _probe_interlocks_parse_cmd(
         for shift_i, shift_dir in _probe_interlocks_parse_shifts(cmd[2:], n_plates):
             _interlocks_set(interlocks, n_plates, set_plate, shift_i, -shift_dir)
 
+        _interlocks_print(interlocks, n_plates, unprobed)
         return lock, _bits_unset(unprobed, set_plate)
 
     if (len(cmd) > 1) and (cmd[0] in ("s", "b")):
-        stuck_plates: list[tuple[int, int]] = []
         for stuck_plate in cmd[1:]:
             stuck_plate = int(stuck_plate)
             if stuck_plate < 1:
@@ -368,12 +362,19 @@ def _probe_interlocks_parse_cmd(
                     f"Plate #{stuck_plate + 1} cannot be stuck: pin is not in edge position"
                 )
 
-            stuck_plates.append((stuck_plate, stuck_plate_dir))
+            _interlocks_set(
+                interlocks,
+                n_plates,
+                plate_i,
+                stuck_plate,
+                stuck_plate_dir * dir,
+            )
 
+        _interlocks_print(interlocks, n_plates, unprobed)
         if cmd[0] == "s":
-            raise _ProbeStuck(stuck_plates)
+            return lock, unprobed
         if cmd[0] == "b":
-            raise _ProbeLockpickBroke(stuck_plates)
+            return lock_initial, unprobed
 
     if len(cmd) != n_plates:
         raise _Err("Wrong number of plates")
@@ -398,6 +399,7 @@ def _probe_interlocks_parse_cmd(
             )
         lock = _lock_set(lock, shift_i, plate_pos)
 
+    _interlocks_print(interlocks, n_plates, unprobed)
     return lock, _bits_unset(unprobed, plate_i)
 
 
@@ -418,20 +420,6 @@ def _probe_interlocks_parse_shifts(
             raise _Err(f'Unknown change direction of plate #{shift_i + 1}: "{shift}"')
 
         yield shift_i, shift_dir
-
-
-@final
-class _ProbeStuck(Exception):
-    def __init__(self, stuck_plates: list[tuple[int, int]]):
-        super().__init__("Probe stuck")
-        self.stuck_plates = stuck_plates
-
-
-@final
-class _ProbeLockpickBroke(Exception):
-    def __init__(self, stuck_plates: list[tuple[int, int]]):
-        super().__init__("Probe lockpick broke")
-        self.stuck_plates = stuck_plates
 
 
 def _bfs(
