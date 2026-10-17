@@ -33,6 +33,7 @@ def _main():
     try:
         while True:
             lock, n_plates = _input(
+                1,
                 (
                     f"Enter pin positions [{_PLATE_MIN}..{_PLATE_MAX}] from bottom left to top right",
                 ),
@@ -121,6 +122,7 @@ def _unlock(lock_initial: int, n_plates: int):
 
             step_i += 1
             restart = _input(
+                2,
                 (
                     f"Press Enter after applying step {step_i}/{len(solution)}",
                     "or write `r` to restart from the initial state",
@@ -165,6 +167,7 @@ def _probe_interlocks(
 
             step_i += 1
             _ = _input(
+                2,
                 (
                     f"Press Enter after applying correcting step {step_i}/{len(solution) - 1}",
                 ),
@@ -175,6 +178,7 @@ def _probe_interlocks(
         _print_plate_move(lock, n_plates, plate_i, dir)
 
         lock, unprobed = _input(
+            2,
             (
                 "Write plate shifts [<, ., >] from bottom left to top right",
                 f"or `p <PLATE [1..{n_plates}]> [<, ., >] ...` to set connections manually",
@@ -601,13 +605,20 @@ class _Err(Exception):
 _R = TypeVar("_R")
 
 
-def _input(prompt: Iterable[str], parser: Callable[[str], _R] = lambda _: None) -> _R:
+def _input(
+    depth: int, prompt: Iterable[str], parser: Callable[[str], _R] = lambda _: None
+) -> _R:
     while True:
         try:
             for prompt_line in prompt:
                 print(prompt_line)
 
-            command = input(" > ")
+            if depth == 1:
+                print("or Ctrl+D to exit")
+            else:
+                print("or Ctrl+D to abandon this lock")
+
+            command = input(" " + (">" * depth) + " ")
             if not stdin.isatty():
                 print(command)
             print()
