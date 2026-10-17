@@ -443,6 +443,8 @@ def _bfs_extract_solution(
     n_plates: int,
     dist: list[int],
 ) -> list[tuple[int, int, int]]:
+    # TODO: BFS generated a DAG, so it is possible to use topological ordering here to
+    # extract the solution with smallest number of required key presses.
     steps: list[tuple[int, int, int]] = []
     while dist[lock_solved]:
         found_step = False
