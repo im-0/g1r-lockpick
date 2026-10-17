@@ -324,8 +324,7 @@ def _probe_interlocks_parse_cmd(
 ) -> tuple[int, int]:
     if cmd == "r":
         return lock_initial, unprobed
-
-    if (len(cmd) > 2) and (cmd[0] == "p"):
+    elif (len(cmd) > 2) and (cmd[0] == "p"):
         set_plate = int(cmd[1])
         if (set_plate < 1) or (set_plate > n_plates):
             raise _Err(
@@ -336,10 +335,8 @@ def _probe_interlocks_parse_cmd(
         for shift_i, shift_dir in _probe_interlocks_parse_shifts(cmd[2:], n_plates):
             _interlocks_set(interlocks, n_plates, set_plate, shift_i, -shift_dir)
 
-        _interlocks_print(interlocks, n_plates, unprobed)
-        return lock, _bits_unset(unprobed, set_plate)
-
-    if (len(cmd) > 1) and (cmd[0] in ("s", "b")):
+        unprobed = _bits_unset(unprobed, set_plate)
+    elif (len(cmd) > 1) and (cmd[0] in ("s", "b")):
         for stuck_plate in cmd[1:]:
             stuck_plate = int(stuck_plate)
             if stuck_plate < 1:
@@ -370,38 +367,36 @@ def _probe_interlocks_parse_cmd(
                 stuck_plate_dir * dir,
             )
 
-        _interlocks_print(interlocks, n_plates, unprobed)
-        if cmd[0] == "s":
-            return lock, unprobed
         if cmd[0] == "b":
-            return lock_initial, unprobed
+            lock = lock_initial
+    elif len(cmd) == n_plates:
+        for shift_i, shift_dir in _probe_interlocks_parse_shifts(cmd, n_plates):
+            plate_pos = _lock_get(lock, shift_i) + shift_dir
+            if plate_pos < _PLATE_MIN:
+                raise _Err(
+                    f"Plate #{shift_i + 1} cannot move in this direction, already at the left edge"
+                )
+            if plate_pos > _PLATE_MAX:
+                raise _Err(
+                    f"Plate #{shift_i + 1} cannot move in this direction, already at the right edge"
+                )
 
-    if len(cmd) != n_plates:
+            if shift_i == plate_i:
+                if shift_dir != dir:
+                    raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
+                # Diagonal already set to 1s.
+            else:
+                _interlocks_set(interlocks, n_plates, plate_i, shift_i, shift_dir * dir)
+
+            # Adjust current position.
+            lock = _lock_set(lock, shift_i, plate_pos)
+
+        unprobed = _bits_unset(unprobed, plate_i)
+    else:
         raise _Err("Wrong number of plates")
 
-    for shift_i, shift_dir in _probe_interlocks_parse_shifts(cmd, n_plates):
-        plate_pos = _lock_get(lock, shift_i) + shift_dir
-        if plate_pos < _PLATE_MIN:
-            raise _Err(
-                f"Plate #{shift_i + 1} cannot move in this direction, already at the left edge"
-            )
-        if plate_pos > _PLATE_MAX:
-            raise _Err(
-                f"Plate #{shift_i + 1} cannot move in this direction, already at the right edge"
-            )
-
-        if shift_i == plate_i:
-            if shift_dir != dir:
-                raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
-            # Diagonal already set to 1s.
-        else:
-            _interlocks_set(interlocks, n_plates, plate_i, shift_i, shift_dir * dir)
-
-        # Adjust current position.
-        lock = _lock_set(lock, shift_i, plate_pos)
-
     _interlocks_print(interlocks, n_plates, unprobed)
-    return lock, _bits_unset(unprobed, plate_i)
+    return lock, unprobed
 
 
 def _probe_interlocks_parse_shifts(
