@@ -3,6 +3,8 @@
 import atexit
 import readline
 from collections.abc import Callable, Iterable
+from dataclasses import dataclass, field
+from heapq import heappop, heappush
 from os import path
 from pathlib import Path
 from sys import exit, stderr, stdin, stdout
@@ -150,11 +152,12 @@ def _probe_interlocks(
     lock_initial: int, lock_solved: int, n_plates: int
 ) -> tuple[int, list[int]]:
     lock = lock_initial
+    plate_i = 0
     interlocks = _interlocks_new(n_plates)
     unprobed = _bits_from_iter(range(n_plates))
 
     while lock != lock_solved:
-        solution = _bfs_probe(lock, interlocks, n_plates, unprobed)
+        solution = _dijkstra_probe(lock, plate_i, interlocks, n_plates, unprobed)
         if not solution:
             break
 
@@ -208,108 +211,85 @@ def _print_plate_move(lock: int, n_plates: int, plate_i: int, plate_off: int):
         _lock_print(lock, n_plates, {plate_i: f"-> move right {times}"})
 
 
-def _bfs_probe(
-    lock_start: int,
+def _dijkstra_probe(
+    lock_initial: int,
+    plate_i_initial: int,
     interlocks: list[int],
     n_plates: int,
-    unprobed_start: int,
+    unprobed_initial: int,
 ) -> list[tuple[int, int, int]]:
-    dist = {(lock_start, unprobed_start): 0}
+    @dataclass(order=True)
+    class Queued:
+        prio: int
+        lock: int = field(compare=False)
+        plate_i: int = field(compare=False)
+        unprobed: int = field(compare=False)
 
-    cur_nodes = [(lock_start, unprobed_start)]
-    next_nodes = []
-    next_dist = 1
-    moves: list[tuple[int, int, int]] = []
+    dist = {(lock_initial, plate_i_initial, unprobed_initial): 0}
+    queue = [
+        Queued(
+            prio=0,
+            lock=lock_initial,
+            plate_i=plate_i_initial,
+            unprobed=unprobed_initial,
+        )
+    ]
+    prev: dict[tuple[int, int, int], tuple[int, int, int, int]] = {}
 
-    while cur_nodes:
-        # TODO: Apply heuristics here on `cur_nodes` instead of inside `_bfs_probe_populate_moves()`.
-        while cur_nodes:
-            cur_node, cur_unprobed = cur_nodes.pop()
-            if (cur_unprobed != unprobed_start) or (cur_unprobed == 0):
-                return _bfs_probe_extract_solution(
-                    cur_node,
-                    interlocks,
-                    n_plates,
-                    dist,
-                    cur_unprobed,
-                )
+    while queue:
+        cur_node = heappop(queue)
 
-            _bfs_probe_populate_moves(cur_node, interlocks, n_plates, moves)
-            while moves:
-                lock, plate_i, _ = moves.pop()
-                unprobed = _bits_unset(cur_unprobed, plate_i)
-                if (lock, unprobed) not in dist:
-                    # Not visited yet.
-                    dist[(lock, unprobed)] = next_dist
-                    next_nodes.append((lock, unprobed))
+        if (cur_node.unprobed != unprobed_initial) or (cur_node.unprobed == 0):
+            lock, plate_i, unprobed = cur_node.lock, cur_node.plate_i, cur_node.unprobed
 
-        cur_nodes, next_nodes = next_nodes, cur_nodes
-        next_dist += 1
-
-    assert False, "Logic error: probe BFS failed"
-
-
-def _bfs_probe_extract_solution(
-    lock_solved: int,
-    interlocks: list[int],
-    n_plates: int,
-    dist: dict[tuple[int, int], int],
-    unprobed_solved: int,
-) -> list[tuple[int, int, int]]:
-    solution: list[tuple[int, int, int]] = []
-    while dist[(lock_solved, unprobed_solved)]:
-        found_step = False
+            solution: list[tuple[int, int, int]] = []
+            while dist[(lock, plate_i, unprobed)]:
+                lock, prev_plate_i, unprobed, plate_off = prev[
+                    (lock, plate_i, unprobed)
+                ]
+                solution.append((lock, plate_i, plate_off))
+                plate_i = prev_plate_i
+            solution.reverse()
+            return solution
 
         moves: list[tuple[int, int, int]] = []
-        _bfs_probe_populate_moves(lock_solved, interlocks, n_plates, moves)
+        _bfs_populate_moves(cur_node.lock, interlocks, n_plates, moves)
+        cur_dist = dist[(cur_node.lock, cur_node.plate_i, cur_node.unprobed)]
         for lock, plate_i, plate_off in moves:
-            plate_off = -plate_off
+            move_dist = cur_dist
+            # 1. Prefer less switches between the game and the solver.
+            move_dist += 10000
+            # 2. Prefer plates further from center.
+            move_dist += 1000 * (
+                _PLATE_SOLVED
+                - _PLATE_MIN
+                - abs(_PLATE_SOLVED - _lock_get(cur_node.lock, plate_i))
+            )
+            # 3. Prefer shorter plate moves.
+            move_dist += 100 * abs(plate_off)
+            # 4. Prefer moves towards center.
+            move_dist += 10 * abs(_PLATE_SOLVED - _lock_get(lock, plate_i))
+            # 5. Prefer plates that are closer together.
+            move_dist += abs(plate_i - cur_node.plate_i)
 
-            for unprobed in (unprobed_solved, _bits_set(unprobed_solved, plate_i)):
-                if (
-                    dist.get((lock, unprobed))
-                    == dist[(lock_solved, unprobed_solved)] - 1
-                ):
-                    solution.append((lock, plate_i, plate_off))
+            unprobed = _bits_unset(cur_node.unprobed, plate_i)
+            old_move_dist = dist.get((lock, plate_i, unprobed))
+            if (old_move_dist is None) or (move_dist < old_move_dist):
+                prev[(lock, plate_i, unprobed)] = (
+                    cur_node.lock,
+                    cur_node.plate_i,
+                    cur_node.unprobed,
+                    plate_off,
+                )
+                dist[(lock, plate_i, unprobed)] = move_dist
+                heappush(
+                    queue,
+                    Queued(
+                        prio=move_dist, lock=lock, plate_i=plate_i, unprobed=unprobed
+                    ),
+                )
 
-                    found_step = True
-                    lock_solved = lock
-                    unprobed_solved = unprobed
-                    break
-
-            if found_step:
-                break
-        assert found_step, "Logic error: unable to extract probe solution"
-
-    solution.reverse()
-    return solution
-
-
-def _bfs_probe_populate_moves(
-    lock: int, interlocks: list[int], n_plates: int, moves: list[tuple[int, int, int]]
-):
-    _bfs_populate_moves(lock, interlocks, n_plates, moves)
-
-    # Prefer moves towards center.
-    moves.sort(
-        key=lambda m: (
-            0
-            if abs(_PLATE_SOLVED - _lock_get(m[0], m[1]))
-            < abs(_PLATE_SOLVED - _lock_get(lock, m[1]))
-            else 1
-        )
-    )
-
-    # Prefer moving edge plate if there is exactly one.
-    edge_plate_i = None
-    for plate_i in range(n_plates):
-        if _lock_get(lock, plate_i) in (_PLATE_MIN, _PLATE_MAX):
-            if edge_plate_i is None:
-                edge_plate_i = plate_i
-            else:
-                edge_plate_i = ()
-    if edge_plate_i not in (None, ()):
-        moves.sort(key=lambda m: 0 if m[1] == edge_plate_i else 1)
+    assert False, "Logic error: probe Dijkstra failed"
 
 
 def _probe_interlocks_parse_cmd(
@@ -523,10 +503,6 @@ def _bits_from_iter(bits: Iterable[int]) -> int:
 
 def _bits_get(bits: int, bit_pos: int) -> int:
     return (bits >> bit_pos) & 0b1
-
-
-def _bits_set(bits: int, set_bit_pos: int) -> int:
-    return bits | (0b1 << set_bit_pos)
 
 
 def _bits_unset(bits: int, unset_bit_pos: int) -> int:
