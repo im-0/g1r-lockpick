@@ -99,7 +99,9 @@ def _unlock(lock_initial: int, n_plates: int):
         lock_solved <<= _PLATE_BITS
         lock_solved |= _PLATE_SOLVED
 
-    lock, interlocks = _probe_interlocks(lock_initial, lock_solved, n_plates)
+    lock, interlocks, plate_i_start = _probe_interlocks(
+        lock_initial, lock_solved, n_plates
+    )
 
     restart = True
     solution = None
@@ -111,7 +113,7 @@ def _unlock(lock_initial: int, n_plates: int):
         if solution is None:
             print("Solving...")
             time_passed = monotonic_ns()
-            solution = _bfs(lock, lock_solved, interlocks, n_plates)
+            solution = _bfs(lock, plate_i_start, lock_solved, interlocks, n_plates)
             time_passed = monotonic_ns() - time_passed
             print(f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)")
             print()
@@ -133,6 +135,7 @@ def _unlock(lock_initial: int, n_plates: int):
                 if lock != lock_initial:
                     lock = lock_initial
                     solution = None
+                plate_i_start = 0
                 break
 
     if solution == []:
@@ -151,7 +154,7 @@ def _unlock_parse_cmd(cmd: str) -> bool:
 
 def _probe_interlocks(
     lock_initial: int, lock_solved: int, n_plates: int
-) -> tuple[int, list[int]]:
+) -> tuple[int, list[int], int]:
     lock = lock_initial
     plate_i = 0
     interlocks = _interlocks_new(n_plates)
@@ -200,7 +203,7 @@ def _probe_interlocks(
             ),
         )
 
-    return lock, interlocks
+    return lock, interlocks, plate_i
 
 
 def _print_plate_move(lock: int, n_plates: int, plate_i: int, plate_off: int):
@@ -403,6 +406,7 @@ def _probe_interlocks_parse_shifts(
 
 def _bfs(
     lock_start: int,
+    plate_i_start: int,
     lock_solved: int,
     interlocks: list[int],
     n_plates: int,
@@ -421,6 +425,7 @@ def _bfs(
             cur_node = cur_nodes.pop()
             if cur_node == lock_solved:
                 return _bfs_extract_solution(
+                    plate_i_start,
                     cur_node,
                     interlocks,
                     n_plates,
@@ -442,6 +447,7 @@ def _bfs(
 
 
 def _bfs_extract_solution(
+    plate_i_start: int,
     lock_solved: int,
     interlocks: list[int],
     n_plates: int,
@@ -466,6 +472,13 @@ def _bfs_extract_solution(
                 break
         assert found_step, "Logic error: unable to extract solution"
     steps.reverse()
+
+    key_presses = 0
+    for _, plate_i, plate_off in steps:
+        key_presses += abs(plate_i_start - plate_i) + abs(plate_off)
+        plate_i_start = plate_i
+    print(f"Solution requires {key_presses} key presses")
+
     return steps
 
 
