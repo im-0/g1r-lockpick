@@ -367,12 +367,11 @@ def _probe_interlocks_parse_cmd(
                     f"Plate #{shift_i + 1} cannot move in this direction, already at the right edge"
                 )
 
-            if shift_i == plate_i:
-                if shift_dir != dir:
-                    raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
-                # Diagonal already set to 1s.
-            else:
-                _interlocks_set(interlocks, n_plates, plate_i, shift_i, shift_dir * dir)
+            shift_dir *= dir
+            old_shift_dir = _interlocks_get(interlocks, n_plates, plate_i, shift_i)
+            if (old_shift_dir != 0) and (old_shift_dir != shift_dir):
+                raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
+            _interlocks_set(interlocks, n_plates, plate_i, shift_i, shift_dir)
 
             # Adjust current position.
             lock = _lock_set(lock, shift_i, plate_pos)
@@ -602,6 +601,10 @@ def _interlocks_print(matrix: list[int], n_plates: int, unprobed: int):
     print("      \\   " + "   " * n_plates + "affected")
     print("       moved by player")
     print()
+
+
+def _interlocks_get(matrix: list[int], n_plates: int, row_i: int, col_i: int):
+    return matrix[row_i * n_plates + col_i]
 
 
 def _interlocks_set(
