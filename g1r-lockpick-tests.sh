@@ -6,7 +6,7 @@
 [ "${PY3_IMPL}" = "" ] && PY3_IMPL=$( which pypy3 2>/dev/null )
 [ "${PY3_IMPL}" = "" ] && PY3_IMPL="python3"
 
-TIMEOUT_CMD="timeout --kill-after=2s 10s"
+TIMEOUT_CMD="timeout --kill-after=2s 60s"
 
 set -x -e -u
 

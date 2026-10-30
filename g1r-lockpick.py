@@ -5,6 +5,7 @@ import readline
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass, field
 from heapq import heappop, heappush
+from math import ceil, log2
 from os import path
 from pathlib import Path
 from sys import exit, stderr, stdin, stdout
@@ -18,6 +19,7 @@ _READLINE_HISTORY_LEN = 1000
 _PLATE_BITS = 3
 _PLATE_MASK = (0b1 << _PLATE_BITS) - 1
 _MAX_PLATES = 7
+_MAX_STEPS_OR_KEY_PRESSES_BITS = 8
 
 _PLATE_MIN = 1
 _PLATE_SOLVED = 4
@@ -113,9 +115,16 @@ def _unlock(lock_initial: int, n_plates: int):
         if solution is None:
             print("Solving...")
             time_passed = monotonic_ns()
-            solution = _bfs(lock, plate_i_start, lock_solved, interlocks, n_plates)
+            solution = _dijkstra(lock, plate_i_start, lock_solved, interlocks, n_plates)
             time_passed = monotonic_ns() - time_passed
             print(f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)")
+
+            key_presses = 0
+            for _, plate_i, plate_off in solution:
+                key_presses += abs(plate_i_start - plate_i) + abs(plate_off)
+                plate_i_start = plate_i
+            print(f"Solution requires {key_presses} key presses")
+
             print()
 
         restart = False
@@ -259,7 +268,7 @@ def _dijkstra_probe(
             return solution
 
         moves: list[tuple[int, int, int]] = []
-        _bfs_populate_moves(cur_node.lock, interlocks, n_plates, moves)
+        _populate_moves(cur_node.lock, interlocks, n_plates, moves)
         cur_dist = dist[(cur_node.lock, cur_node.plate_i, cur_node.unprobed)]
         for lock, plate_i, plate_off in moves:
             move_dist = cur_dist
@@ -403,85 +412,82 @@ def _probe_interlocks_parse_shifts(
         yield shift_i, shift_dir
 
 
-def _bfs(
+def _dijkstra(
     lock_start: int,
     plate_i_start: int,
     lock_solved: int,
     interlocks: list[int],
     n_plates: int,
 ) -> list[tuple[int, int, int]]:
-    n_nodes = 0b1 << (n_plates * _PLATE_BITS)
-    dist = [_U32_MAX] * n_nodes
+    plate_i_bits = ceil(log2(n_plates))
+    plate_i_shift = n_plates * _PLATE_BITS
+    prio_shift = plate_i_shift + plate_i_bits
+    plate_off_shift = prio_shift
+    lock_mask = (0b1 << plate_i_shift) - 1
+    plate_i_mask = (0b1 << plate_i_bits) - 1
+    plate_i_and_lock_mask = (0b1 << prio_shift) - 1
 
-    cur_nodes = [lock_start]
-    next_nodes = []
-    dist[lock_start] = 0
-    next_dist = 1
+    n_nodes = 0b1 << (plate_i_bits + plate_i_shift)
+
+    dist = [_U32_MAX] * n_nodes
+    dist[(plate_i_start << plate_i_shift) | lock_start] = 0
+
+    queue = [(plate_i_start << plate_i_shift) | lock_start]
+
+    prev = [_U32_MAX] * n_nodes
+
     moves: list[tuple[int, int, int]] = []
 
-    while cur_nodes:
-        while cur_nodes:
-            cur_node = cur_nodes.pop()
-            if cur_node == lock_solved:
-                return _bfs_extract_solution(
-                    plate_i_start,
-                    cur_node,
-                    interlocks,
-                    n_plates,
-                    dist,
-                )
+    while queue:
+        cur_node = heappop(queue)
+        cur_lock = cur_node & lock_mask
+        cur_plate_i = (cur_node >> plate_i_shift) & plate_i_mask
+        cur_plate_i_and_lock = cur_node & plate_i_and_lock_mask
+        cur_dist = cur_node >> prio_shift
 
-            _bfs_populate_moves(cur_node, interlocks, n_plates, moves)
-            while moves:
-                lock, _, _ = moves.pop()
-                if dist[lock] == _U32_MAX:
-                    # Not visited yet.
-                    dist[lock] = next_dist
-                    next_nodes.append(lock)
+        if cur_dist != dist[cur_plate_i_and_lock]:
+            continue
 
-        cur_nodes, next_nodes = next_nodes, cur_nodes
-        next_dist += 1
+        if cur_lock == lock_solved:
+            solution: list[tuple[int, int, int]] = []
+            while dist[cur_plate_i_and_lock] != 0:
+                cur_node = prev[cur_plate_i_and_lock]
+
+                cur_lock = cur_node & lock_mask
+                prev_plate_i = (cur_node >> plate_i_shift) & plate_i_mask
+                cur_plate_i_and_lock = cur_node & plate_i_and_lock_mask
+                cur_plate_off = (cur_node >> plate_off_shift) - _PLATE_MAX + 1
+
+                solution.append((cur_lock, cur_plate_i, cur_plate_off))
+                cur_plate_i = prev_plate_i
+            solution.reverse()
+
+            return solution
+
+        _populate_moves(cur_lock, interlocks, n_plates, moves)
+        while moves:
+            lock, plate_i, plate_off = moves.pop()
+
+            move_dist = cur_dist
+            # 1. Prefer less switches between the game and the solver.
+            move_dist += 1 << _MAX_STEPS_OR_KEY_PRESSES_BITS
+            # 2. Prefer less key presses.
+            move_dist += abs(plate_off) + abs(plate_i - cur_plate_i)
+
+            new_node = (plate_i << plate_i_shift) | lock
+            old_move_dist = dist[new_node]
+            if move_dist < old_move_dist:
+                prev[new_node] = (
+                    (plate_off + _PLATE_MAX - 1) << plate_off_shift
+                ) | cur_plate_i_and_lock
+
+                dist[new_node] = move_dist
+                heappush(queue, (move_dist << prio_shift) | new_node)
 
     raise _Err("No solution found!")
 
 
-def _bfs_extract_solution(
-    plate_i_start: int,
-    lock_solved: int,
-    interlocks: list[int],
-    n_plates: int,
-    dist: list[int],
-) -> list[tuple[int, int, int]]:
-    # TODO: BFS generated a DAG, so it is possible to use topological ordering here to
-    # extract the solution with smallest number of required key presses.
-    steps: list[tuple[int, int, int]] = []
-    while dist[lock_solved]:
-        found_step = False
-
-        moves: list[tuple[int, int, int]] = []
-        _bfs_populate_moves(lock_solved, interlocks, n_plates, moves)
-        for lock, plate_i, plate_off in moves:
-            plate_off = -plate_off
-
-            if dist[lock] == dist[lock_solved] - 1:
-                steps.append((lock, plate_i, plate_off))
-
-                found_step = True
-                lock_solved = lock
-                break
-        assert found_step, "Logic error: unable to extract solution"
-    steps.reverse()
-
-    key_presses = 0
-    for _, plate_i, plate_off in steps:
-        key_presses += abs(plate_i_start - plate_i) + abs(plate_off)
-        plate_i_start = plate_i
-    print(f"Solution requires {key_presses} key presses")
-
-    return steps
-
-
-def _bfs_populate_moves(
+def _populate_moves(
     lock: int, interlocks: list[int], n_plates: int, moves: list[tuple[int, int, int]]
 ):
     for plate_i in range(n_plates):
