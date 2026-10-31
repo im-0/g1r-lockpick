@@ -336,28 +336,9 @@ def _probe_interlocks_parse_cmd(
 
         unprobed = _bits_unset(unprobed, set_plate)
     elif (len(cmd) > 1) and (cmd[0] in ("s", "b")):
-        for stuck_plate in cmd[1:]:
-            stuck_plate = int(stuck_plate)
-            if stuck_plate < 1:
-                raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} < 1")
-            if stuck_plate > n_plates:
-                raise _Err(
-                    f"Index of stuck plate is wrong: got {stuck_plate} > {n_plates}"
-                )
-            stuck_plate -= 1
-
-            stuck_plate_pos = _lock_get(lock, stuck_plate)
-            if stuck_plate_pos == _PLATE_MIN:
-                # Plate tried to move right.
-                stuck_plate_dir = -1
-            elif stuck_plate_pos == _PLATE_MAX:
-                # Plate tried to move left.
-                stuck_plate_dir = 1
-            else:
-                raise _Err(
-                    f"Plate #{stuck_plate + 1} cannot be stuck: pin is not in edge position"
-                )
-
+        for stuck_plate, stuck_plate_dir in _parse_and_validate_stuck_plates(
+            cmd[1:], lock, n_plates
+        ):
             _interlocks_set(
                 interlocks,
                 n_plates,
@@ -386,6 +367,34 @@ def _probe_interlocks_parse_cmd(
 
     _interlocks_print(interlocks, n_plates, unprobed)
     return lock, unprobed
+
+
+def _parse_and_validate_stuck_plates(
+    stuck: str, lock: int, n_plates: int
+) -> Iterable[tuple[int, int]]:
+    validated = []
+    for stuck_plate in stuck:
+        stuck_plate = int(stuck_plate)
+        if stuck_plate < 1:
+            raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} < 1")
+        if stuck_plate > n_plates:
+            raise _Err(f"Index of stuck plate is wrong: got {stuck_plate} > {n_plates}")
+        stuck_plate -= 1
+
+        stuck_plate_pos = _lock_get(lock, stuck_plate)
+        if stuck_plate_pos == _PLATE_MIN:
+            # Plate tried to move right.
+            stuck_plate_dir = -1
+        elif stuck_plate_pos == _PLATE_MAX:
+            # Plate tried to move left.
+            stuck_plate_dir = 1
+        else:
+            raise _Err(
+                f"Plate #{stuck_plate + 1} cannot be stuck: pin is not in edge position"
+            )
+
+        validated.append((stuck_plate, stuck_plate_dir))
+    return validated
 
 
 def _probe_interlocks_parse_and_validate_shifts(
