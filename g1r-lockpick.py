@@ -141,10 +141,10 @@ def _unlock(lock_initial: int, n_plates: int):
                 _unlock_parse_cmd,
             )
             if restart:
-                if lock != lock_initial:
+                if (lock != lock_initial) or (plate_i_start != 0):
                     lock = lock_initial
+                    plate_i_start = 0
                     solution = None
-                plate_i_start = 0
                 break
 
     if solution == []:
