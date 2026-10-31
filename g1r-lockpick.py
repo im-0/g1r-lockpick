@@ -235,7 +235,7 @@ def _dijkstra_probe(
 ) -> list[tuple[int, int, int]]:
     @dataclass(order=True)
     class Queued:
-        prio: int
+        dist: int
         lock: int = field(compare=False)
         plate_i: int = field(compare=False)
         unprobed: int = field(compare=False)
@@ -243,7 +243,7 @@ def _dijkstra_probe(
     dist = {(lock_initial, plate_i_initial, unprobed_initial): 0}
     queue = [
         Queued(
-            prio=0,
+            dist=0,
             lock=lock_initial,
             plate_i=plate_i_initial,
             unprobed=unprobed_initial,
@@ -254,11 +254,14 @@ def _dijkstra_probe(
     while queue:
         cur_node = heappop(queue)
 
+        if cur_node.dist != dist[(cur_node.lock, cur_node.plate_i, cur_node.unprobed)]:
+            continue
+
         if (cur_node.unprobed != unprobed_initial) or (cur_node.unprobed == 0):
             lock, plate_i, unprobed = cur_node.lock, cur_node.plate_i, cur_node.unprobed
 
             solution: list[tuple[int, int, int]] = []
-            while dist[(lock, plate_i, unprobed)]:
+            while dist[(lock, plate_i, unprobed)] != 0:
                 lock, prev_plate_i, unprobed, plate_off = prev[
                     (lock, plate_i, unprobed)
                 ]
@@ -269,21 +272,22 @@ def _dijkstra_probe(
 
         moves: list[tuple[int, int, int]] = []
         _populate_moves(cur_node.lock, interlocks, n_plates, moves)
-        cur_dist = dist[(cur_node.lock, cur_node.plate_i, cur_node.unprobed)]
         for lock, plate_i, plate_off in moves:
-            move_dist = cur_dist
+            move_dist = cur_node.dist
             # 1. Prefer less switches between the game and the solver.
-            move_dist += 10000
+            move_dist += 1 << (_MAX_STEPS_OR_KEY_PRESSES_BITS * 4)
             # 2. Prefer plates further from center.
-            move_dist += 1000 * (
+            move_dist += (
                 _PLATE_SOLVED
                 - _PLATE_MIN
                 - abs(_PLATE_SOLVED - _lock_get(cur_node.lock, plate_i))
-            )
+            ) << (_MAX_STEPS_OR_KEY_PRESSES_BITS * 3)
             # 3. Prefer shorter plate moves.
-            move_dist += 100 * abs(plate_off)
+            move_dist += abs(plate_off) << (_MAX_STEPS_OR_KEY_PRESSES_BITS * 2)
             # 4. Prefer moves towards center.
-            move_dist += 10 * abs(_PLATE_SOLVED - _lock_get(lock, plate_i))
+            move_dist += (
+                abs(_PLATE_SOLVED - _lock_get(lock, plate_i))
+            ) << _MAX_STEPS_OR_KEY_PRESSES_BITS
             # 5. Prefer plates that are closer together.
             move_dist += abs(plate_i - cur_node.plate_i)
 
@@ -300,7 +304,7 @@ def _dijkstra_probe(
                 heappush(
                     queue,
                     Queued(
-                        prio=move_dist, lock=lock, plate_i=plate_i, unprobed=unprobed
+                        dist=move_dist, lock=lock, plate_i=plate_i, unprobed=unprobed
                     ),
                 )
 
