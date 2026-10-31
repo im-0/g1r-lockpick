@@ -189,7 +189,7 @@ def _probe_interlocks(
         dir = plate_off // abs(plate_off)
         _print_plate_move(lock, n_plates, plate_i, dir)
 
-        lock, unprobed = _input(
+        lock, unprobed, restart = _input(
             2,
             (
                 "Write plate shifts [<, ., >] from bottom left to top right",
@@ -211,6 +211,8 @@ def _probe_interlocks(
                 )
             ),
         )
+        if restart:
+            plate_i = 0
 
     return lock, interlocks, plate_i
 
@@ -320,9 +322,10 @@ def _probe_interlocks_parse_cmd(
     n_plates: int,
     plate_i: int,
     dir: int,
-) -> tuple[int, int]:
+) -> tuple[int, int, bool]:
     if cmd == "r":
-        return lock_initial, unprobed
+        lock = lock_initial
+        restart = True
     elif (len(cmd) > 2) and (cmd[0] == "p"):
         set_plate = int(cmd[1])
         if (set_plate < 1) or (set_plate > n_plates):
@@ -335,6 +338,7 @@ def _probe_interlocks_parse_cmd(
             _interlocks_set(interlocks, n_plates, set_plate, shift_i, -shift_dir)
 
         unprobed = _bits_unset(unprobed, set_plate)
+        restart = False
     elif (len(cmd) > 1) and (cmd[0] in ("s", "b")):
         for stuck_plate, stuck_plate_dir in _parse_and_validate_stuck_plates(
             cmd[1:], lock, n_plates
@@ -347,8 +351,11 @@ def _probe_interlocks_parse_cmd(
                 stuck_plate_dir * dir,
             )
 
-        if cmd[0] == "b":
+        if cmd[0] == "s":
+            restart = False
+        else:
             lock = lock_initial
+            restart = True
     elif len(cmd) == n_plates:
         for (
             shift_i,
@@ -362,11 +369,12 @@ def _probe_interlocks_parse_cmd(
             lock = _lock_set(lock, shift_i, plate_pos)
 
         unprobed = _bits_unset(unprobed, plate_i)
+        restart = False
     else:
         raise _Err("Wrong number of plates")
 
     _interlocks_print(interlocks, n_plates, unprobed)
-    return lock, unprobed
+    return lock, unprobed, restart
 
 
 def _parse_and_validate_stuck_plates(
