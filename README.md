@@ -207,8 +207,13 @@ Current lock state:
                      |
 
 Solving...
-Time passed: 0.463s (463308145ns)
-Solution requires 18 key presses
+
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                              !
+!               Time passed: 0.093s (93450514ns)               !
+!               Solution requires 18 key presses               !
+!                                                              !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 
     5:         [ - - 3 - - - - ]     :5
     4:           [ - 2 - - - - - ]   :4
@@ -275,5 +280,9 @@ or write `r` to restart from the initial state
 or Ctrl+D to abandon this lock
  >> 
 
-Should be solved after 5 steps!
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+!                                                              !
+!               Should be solved after 5 steps!                !
+!                                                              !
+!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 ```

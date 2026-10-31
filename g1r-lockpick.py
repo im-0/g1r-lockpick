@@ -15,6 +15,8 @@ from typing import TypeVar, final
 _READLINE_HISTORY_FILE = path.join(Path.home(), ".g1r-lockpick.history")
 _READLINE_HISTORY_LEN = 1000
 
+_MAX_LINE_LEN = 64
+
 # 3 bits per plate packed into 32bit integers.
 _PLATE_BITS = 3
 _PLATE_MASK = (0b1 << _PLATE_BITS) - 1
@@ -120,15 +122,20 @@ def _unlock(lock_initial: int, n_plates: int):
             time_passed = monotonic_ns()
             solution = _dijkstra(lock, plate_i_start, lock_solved, interlocks, n_plates)
             time_passed = monotonic_ns() - time_passed
-            print(f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)")
 
             key_presses = 0
             prev_plate_i = plate_i_start
             for _, plate_i, plate_off in solution:
                 key_presses += abs(prev_plate_i - plate_i) + abs(plate_off)
                 prev_plate_i = plate_i
-            print(f"Solution requires {key_presses} key presses")
 
+            print()
+            _print_banner(
+                [
+                    f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)",
+                    f"Solution requires {key_presses} key presses",
+                ]
+            )
             print()
 
         restart = False
@@ -152,9 +159,9 @@ def _unlock(lock_initial: int, n_plates: int):
                 break
 
     if solution == []:
-        print("Already solved!")
+        _print_banner(["Already solved!"])
     elif solution is not None:
-        print(f"Should be solved after {len(solution)} steps!")
+        _print_banner([f"Should be solved after {len(solution)} steps!"])
 
 
 def _unlock_parse_cmd(cmd: str) -> bool:
@@ -667,6 +674,18 @@ def _interlocks_set(
 @final
 class _Err(Exception):
     pass
+
+
+def _print_banner(lines: list[str]):
+    print("!" * _MAX_LINE_LEN)
+    print("!" + (" " * (_MAX_LINE_LEN - 2)) + "!")
+    for line in lines:
+        spaces = max(_MAX_LINE_LEN - len(line) - 2, 0)
+        spaces_left = spaces // 2
+        spaces_right = spaces - spaces_left
+        print("!" + (" " * spaces_left) + line + (" " * spaces_right) + "!")
+    print("!" + (" " * (_MAX_LINE_LEN - 2)) + "!")
+    print("!" * _MAX_LINE_LEN)
 
 
 _R = TypeVar("_R")
