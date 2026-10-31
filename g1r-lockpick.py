@@ -46,6 +46,9 @@ def _main():
             try:
                 _unlock(lock, n_plates)
                 last_ret_code = 0
+            except _Err as e:
+                print(f"ERROR: {e}")
+                print()
             except EOFError:
                 print()
 
