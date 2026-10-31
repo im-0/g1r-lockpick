@@ -369,23 +369,14 @@ def _probe_interlocks_parse_cmd(
         if cmd[0] == "b":
             lock = lock_initial
     elif len(cmd) == n_plates:
-        for shift_i, shift_dir in _probe_interlocks_parse_shifts(cmd, n_plates):
-            plate_pos = _lock_get(lock, shift_i) + shift_dir
-            if plate_pos < _PLATE_MIN:
-                raise _Err(
-                    f"Plate #{shift_i + 1} cannot move in this direction, already at the left edge"
-                )
-            if plate_pos > _PLATE_MAX:
-                raise _Err(
-                    f"Plate #{shift_i + 1} cannot move in this direction, already at the right edge"
-                )
-
-            shift_dir *= dir
-            old_shift_dir = _interlocks_get(interlocks, n_plates, plate_i, shift_i)
-            if (old_shift_dir != 0) and (old_shift_dir != shift_dir):
-                raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
+        for (
+            shift_i,
+            shift_dir,
+            plate_pos,
+        ) in _probe_interlocks_parse_and_validate_shifts(
+            cmd, lock, interlocks, n_plates, plate_i, dir
+        ):
             _interlocks_set(interlocks, n_plates, plate_i, shift_i, shift_dir)
-
             # Adjust current position.
             lock = _lock_set(lock, shift_i, plate_pos)
 
@@ -397,12 +388,40 @@ def _probe_interlocks_parse_cmd(
     return lock, unprobed
 
 
+def _probe_interlocks_parse_and_validate_shifts(
+    shifts: str, lock: int, interlocks: list[int], n_plates: int, plate_i: int, dir: int
+) -> Iterable[tuple[int, int, int]]:
+    if len(shifts) != n_plates:
+        raise _Err(f"Wrong number of plates: got {len(shifts)}, expected {n_plates}")
+
+    validated = []
+    for shift_i, shift_dir in _probe_interlocks_parse_shifts(shifts, n_plates):
+        plate_pos = _lock_get(lock, shift_i) + shift_dir
+        if plate_pos < _PLATE_MIN:
+            raise _Err(
+                f"Plate #{shift_i + 1} cannot move in this direction, already at the left edge"
+            )
+        if plate_pos > _PLATE_MAX:
+            raise _Err(
+                f"Plate #{shift_i + 1} cannot move in this direction, already at the right edge"
+            )
+
+        shift_dir *= dir
+        old_shift_dir = _interlocks_get(interlocks, n_plates, plate_i, shift_i)
+        if (old_shift_dir != 0) and (old_shift_dir != shift_dir):
+            raise _Err(f"Plate #{plate_i + 1} moved in unexpected direction")
+
+        validated.append((shift_i, shift_dir, plate_pos))
+    return validated
+
+
 def _probe_interlocks_parse_shifts(
     shifts: str, n_plates: int
 ) -> Iterable[tuple[int, int]]:
     if len(shifts) != n_plates:
         raise _Err(f"Wrong number of plates: got {len(shifts)}, expected {n_plates}")
 
+    parsed = []
     for shift_i, shift in enumerate(shifts):
         if shift == "<":
             shift_dir = 1
@@ -413,7 +432,8 @@ def _probe_interlocks_parse_shifts(
         else:
             raise _Err(f'Unknown change direction of plate #{shift_i + 1}: "{shift}"')
 
-        yield shift_i, shift_dir
+        parsed.append((shift_i, shift_dir))
+    return parsed
 
 
 def _dijkstra(
