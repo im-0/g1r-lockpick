@@ -308,7 +308,7 @@ def _dijkstra_probe(
                     ),
                 )
 
-    assert False, "Logic error: probe Dijkstra failed"
+    raise _Err("Impossible to probe!")
 
 
 def _probe_interlocks_parse_cmd(
