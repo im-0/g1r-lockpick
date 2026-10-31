@@ -120,9 +120,10 @@ def _unlock(lock_initial: int, n_plates: int):
             print(f"Time passed: {time_passed / 1_000_000_000:.03f}s ({time_passed}ns)")
 
             key_presses = 0
+            prev_plate_i = plate_i_start
             for _, plate_i, plate_off in solution:
-                key_presses += abs(plate_i_start - plate_i) + abs(plate_off)
-                plate_i_start = plate_i
+                key_presses += abs(prev_plate_i - plate_i) + abs(plate_off)
+                prev_plate_i = plate_i
             print(f"Solution requires {key_presses} key presses")
 
             print()
