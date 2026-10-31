@@ -10,6 +10,8 @@ solutions with the same number of switches it finds one with minimal number of r
 Solver guides you through the lock probing to deduce how plates are interconnected and then provides a
 solution.
 
+Solver requires only Python 3 and does not use any external libraries.
+
 ## Example lock picking session
 
 Chest in Mud's hut in the Old Camp (on the screenshot above):
